@@ -8,3 +8,52 @@ storeDir: .pnpm-store
 # Only these packages may run install scripts.
 allowBuilds:
   esbuild: true
+
+# Supply-chain hardening (semgrep package_managers.pnpm.*).
+# Skip versions published less than 7 days ago.
+minimumReleaseAge: 10080
+# Refuse versions that drop provenance/trust compared to earlier releases.
+trustPolicy: no-downgrade
+# Transitive deps must come from the registry, not git/tarball URLs.
+blockExoticSubdeps: true
+
+# Temporary exceptions (added 2026-10-20). Remove each entry once the release
+# is older than 7 days or the trust issue is resolved upstream.
+minimumReleaseAgeExclude:
+  - '@fastify/helmet@13.2.0'
+  - '@rolldown/binding-android-arm-eabi@1.2.14'
+  - '@rolldown/binding-android-arm64@1.2.14'
+  - '@rolldown/binding-darwin-arm64@1.2.14'
+  - '@rolldown/binding-darwin-x64@1.2.14'
+  - '@rolldown/binding-freebsd-x64@1.2.14'
+  - '@rolldown/binding-linux-arm-gnueabihf@1.2.14'
+  - '@rolldown/binding-linux-arm64-gnu@1.2.14'
+  - '@rolldown/binding-linux-arm64-musl@1.2.14'
+  - '@rolldown/binding-linux-ppc64-gnu@1.2.14'
+  - '@rolldown/binding-linux-s390x-gnu@1.2.14'
+  - '@rolldown/binding-linux-x64-gnu@1.2.14'
+  - '@rolldown/binding-linux-x64-musl@1.2.14'
+  - '@rolldown/binding-openharmony-arm64@1.2.14'
+  - '@rolldown/binding-win32-arm64-msvc@1.2.14'
+  - '@rolldown/binding-win32-x64-msvc@1.2.14'
+  - '@typescript-eslint/tsconfig-utils@8.72.0'
+  - '@typescript-eslint/types@8.72.0'
+  - '@vitest/mocker@5.0.5'
+  - '@vitest/spy@5.0.5'
+  - 'baseline-browser-mapping@2.11.29'
+  - 'browserslist@4.29.4'
+  - 'electron-to-chromium@1.5.459'
+  - 'eslint@10.13.0'
+  - 'fast-json-stringify@7.1.2'
+  - 'ignore@7.0.13'
+  - 'node-releases@2.0.59'
+  - 'postcss@8.5.31'
+  - 'react-dom@19.3.1'
+  - 'react@19.3.1'
+  - 'ret@0.5.1'
+  - 'rolldown@1.2.14'
+  - 'set-cookie-parser@3.1.4'
+  - 'vitest@5.0.5'
+trustPolicyExclude:
+  - 'semver@6.3.1'
+  - 'undici-types@6.21.0'

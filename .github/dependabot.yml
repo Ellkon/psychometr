@@ -4,12 +4,18 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: docker
     directories: [/apps/api, /apps/web]
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
