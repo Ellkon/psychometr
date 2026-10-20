@@ -1,0 +1,32 @@
+# Internal / source materials (not for repo)
+internal/
+*.pdf
+*:Zone.Identifier
+
+# Dependencies and build
+node_modules/
+dist/
+build/
+.turbo/
+coverage/
+playwright-report/
+test-results/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Backups and dumps
+backups/
+*.dump
+*.sql.gz
+*.age
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
