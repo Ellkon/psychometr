@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.76.0
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
+  SEMGREP_IMAGE: semgrep/semgrep:1.181.0
+  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.17.0
+
+jobs:
+  check:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm audit --audit-level=high
+
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: >
+          docker run --rm -v "$PWD:/repo" "$GITLEAKS_IMAGE"
+          git /repo --redact --no-banner --exit-code 1
+
+  semgrep:
+    name: SAST (semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: >
+          docker run --rm -v "$PWD:/src" -w /src "$SEMGREP_IMAGE"
+          semgrep scan --metrics=off --error
+          --config p/typescript --config p/nodejs --config p/react
+          --config p/secrets --config p/dockerfile
+          --config p/owasp-top-ten --config p/jwt
+
+  trivy:
+    name: Trivy (repo + images)
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-only-not-a-secret
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Scan repository (deps, IaC misconfig, secrets)
+        run: >
+          docker run --rm -v "$PWD:/src" "$TRIVY_IMAGE"
+          fs /src --ignorefile /src/.trivyignore --scanners vuln,misconfig,secret
+          --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
+      - run: docker compose build --pull
+      - name: Scan images
+        run: |
+          for image in kompas-api kompas-web; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$PWD:/src" -w /src "$TRIVY_IMAGE" \
+              image "$image" --ignorefile .trivyignore --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
+          done
+
+  zap:
+    name: DAST (ZAP baseline)
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-only-not-a-secret
+      SITE_ADDRESS: ":8080"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker compose build --pull && docker compose up -d --wait
+      - name: Wait for API
+        run: |
+          for _ in $(seq 1 30); do
+            curl -fs http://localhost/api/ready && exit 0
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      # -I: WARN-level alerts are reported but do not fail the job yet;
+      # FAIL-level alerts do. Tighten after the first audit (stage 7).
+      - name: ZAP baseline scan
+        run: >
+          docker run --rm --network host "$ZAP_IMAGE"
+          zap-baseline.py -t http://localhost -I
+      - if: always()
+        run: docker compose down -v

@@ -19,7 +19,7 @@ infra/             docker compose, Caddy, скрипты бэкапа
 
 ## Команды
 
-Скелет monorepo ещё не создан. Целевые команды:
+pnpm глобально не ставится: используй `npx pnpm@12.14.0 <команда>` (или алиас `alias pnpm='npx -y pnpm@12.14.0'`). Хранилище пакетов лежит в `.pnpm-store/` внутри репозитория. Для `docker compose` нужен `.env`, скопированный из `.env.example`, с заполненным `POSTGRES_PASSWORD`.
 
 ```bash
 pnpm install
@@ -30,7 +30,8 @@ pnpm lint
 pnpm typecheck
 pnpm db:generate      # drizzle-kit generate
 pnpm db:migrate
-docker compose up -d  # postgres, api, web/caddy
+docker compose up -d  # postgres, api, web/caddy (compose.yaml в корне)
+docker compose -f compose.yaml -f compose.dev.yaml up -d postgres  # БД для pnpm dev
 ```
 
 Перед тем как сообщить, что задача сделана, запусти `pnpm lint && pnpm typecheck && pnpm test`.

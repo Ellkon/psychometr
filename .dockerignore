@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+.pnpm-store
+.git
+.github
+.env
+.env.*
+internal
+docs
+*.pdf
+backups

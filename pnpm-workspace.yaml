@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Keep the package store inside the repo so nothing piles up in $HOME.
+storeDir: .pnpm-store
+
+# Only these packages may run install scripts.
+allowBuilds:
+  esbuild: true

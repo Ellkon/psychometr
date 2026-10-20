@@ -1,0 +1,8 @@
+# Every entry needs a reason and an expiry date (exp:YYYY-MM-DD).
+
+# caddy v2.11.7 (latest as of 2026-10-20) is built with Go 1.26.8 / x/net 0.59.0.
+# DoS-class issues in the TLS edge; no patched Caddy release yet. Re-check and
+# bump caddy before expiry.
+CVE-2026-78667 exp:2026-11-15
+CVE-2026-78669 exp:2026-11-15
+CVE-2026-97031 exp:2026-11-15

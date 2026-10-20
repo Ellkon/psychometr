@@ -30,3 +30,6 @@ backups/
 .vscode/
 .idea/
 .DS_Store
+
+# pnpm store kept in repo
+.pnpm-store/
