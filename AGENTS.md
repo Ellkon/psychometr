@@ -99,8 +99,10 @@ docker compose -f compose.yaml -f compose.dev.yaml up -d postgres  # БД для
 
 - Одна ветка на задачу: `feat/<кратко>`, `fix/<кратко>`, `chore/<кратко>`.
 - Conventional Commits: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`, `security:`.
-- Изменения попадают в `main` только через PR. Перед merge проводится security review диффа: встроенной командой твоего инструмента (например, `/security-review` в Claude Code) или вручную по разделу «Безопасность» этого файла.
-- Агент не делает `push --force` в `main`, не переписывает историю `main` и не пушит без явной просьбы.
+- Ветки: `development` — интеграционная, `main` — релизная.
+- Ветки задач создаются от `development` и попадают в неё только через PR. В `main` изменения попадают только через PR из `development`.
+- Перед merge в `development` и в `main` проводится security review диффа: встроенной командой твоего инструмента (например, `/security-review` в Claude Code) или вручную по разделу «Безопасность» этого файла.
+- Агент не делает `push --force` в `main` и `development`, не переписывает их историю и не пушит без явной просьбы.
 
 ## Чего не делать
 
