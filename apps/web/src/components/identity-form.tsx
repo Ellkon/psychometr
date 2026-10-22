@@ -30,6 +30,7 @@ export function IdentityForm({
         <Field
           label="Фамилия"
           name="lastName"
+          autoComplete="off"
           maxLength={100}
           required
           defaultValue={initial?.lastName}
@@ -37,6 +38,7 @@ export function IdentityForm({
         <Field
           label="Имя"
           name="firstName"
+          autoComplete="off"
           maxLength={100}
           required
           defaultValue={initial?.firstName}
@@ -44,12 +46,14 @@ export function IdentityForm({
         <Field
           label="Отчество, если есть"
           name="middleName"
+          autoComplete="off"
           maxLength={100}
           defaultValue={initial?.middleName ?? ''}
         />
         <Field
           label="Дата рождения"
           name="birthDate"
+          autoComplete="off"
           type="date"
           max={new Date().toISOString().slice(0, 10)}
           defaultValue={initial?.birthDate ?? ''}
@@ -57,6 +61,7 @@ export function IdentityForm({
         <Field
           label="Телефон"
           name="phone"
+          autoComplete="off"
           type="tel"
           maxLength={30}
           defaultValue={initial?.phone ?? ''}
@@ -64,6 +69,7 @@ export function IdentityForm({
         <Field
           label="СНИЛС, 11 цифр"
           name="snils"
+          autoComplete="off"
           inputMode="numeric"
           pattern="[0-9]{11}"
           maxLength={11}

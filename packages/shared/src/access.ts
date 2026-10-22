@@ -41,26 +41,50 @@ export const AcceptInviteSchema = z
   })
   .strict();
 
+// Letters (any script) with inner spaces, hyphens, apostrophes and dots. Rejects
+// digits, markup, control, zero-width and bidi-override characters.
+const PersonNameSchema = z
+  .string()
+  .trim()
+  .normalize('NFC')
+  .min(1)
+  .max(100)
+  .regex(/^\p{L}[\p{L}\p{M} .'’-]*$/u, 'Допустимы буквы, пробел, дефис и апостроф');
+// Formatting characters are allowed for readability; 10-15 digits per E.164.
+const PhoneSchema = z
+  .string()
+  .trim()
+  .regex(/^\+?[0-9][0-9 ()-]{6,28}[0-9]$/)
+  .refine((value) => {
+    const digits = value.replace(/\D/g, '').length;
+    return digits >= 10 && digits <= 15;
+  }, 'Телефон должен содержать от 10 до 15 цифр');
+// SNILS check digits; numbers up to 001-001-998 predate the checksum.
+export function isValidSnils(value: string): boolean {
+  if (!/^\d{11}$/.test(value)) return false;
+  const body = value.slice(0, 9);
+  if (Number(body) <= 1_001_998) return true;
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += Number(body[i]) * (9 - i);
+  const check = sum < 100 ? sum : sum % 101 === 100 ? 0 : sum % 101;
+  return check === Number(value.slice(9));
+}
+
 export const PatientIdentitySchema = z
   .object({
-    firstName: z.string().trim().min(1).max(100),
-    lastName: z.string().trim().min(1).max(100),
-    middleName: z.string().trim().max(100).nullable(),
-    phone: z
-      .string()
-      .regex(/^\+?[0-9 ()-]{7,30}$/)
-      .nullable(),
+    firstName: PersonNameSchema,
+    lastName: PersonNameSchema,
+    middleName: PersonNameSchema.nullable(),
+    phone: PhoneSchema.nullable(),
     birthDate: z.iso
       .date()
+      .refine((value) => value >= '1900-01-01', 'Проверьте дату рождения')
       .refine(
         (value) => value <= new Date().toISOString().slice(0, 10),
         'Дата не может быть в будущем',
       )
       .nullable(),
-    snils: z
-      .string()
-      .regex(/^\d{11}$/)
-      .nullable(),
+    snils: z.string().refine(isValidSnils, 'Неверный СНИЛС').nullable(),
   })
   .strict();
 export type PatientIdentity = z.infer<typeof PatientIdentitySchema>;
