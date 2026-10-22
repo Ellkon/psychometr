@@ -12,6 +12,11 @@ import { AdminPage } from './pages/AdminPage.js';
 import { AuditPage } from './pages/AuditPage.js';
 import { queryClient, SessionProvider } from './lib/session.js';
 import './styles.css';
+import { z } from 'zod';
+
+// CSP forbids eval; skip zod's `new Function` JIT probe so the browser never
+// reports a script-src violation.
+z.config({ jitless: true });
 
 const rootRoute = createRootRoute({
   component: AppShell,
