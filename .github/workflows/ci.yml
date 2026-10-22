@@ -175,12 +175,15 @@ jobs:
       - name: Install Playwright browsers
         if: ${{ !cancelled() }}
         run: pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
-      - name: Bootstrap synthetic administrator and run browser auth tests
+      - name: Bootstrap synthetic administrator
+        id: bootstrap
         if: ${{ !cancelled() }}
-        run: |
-          node scripts/bootstrap-admin.mjs "$RUNNER_TEMP/compass.env" --ci
-          E2E_ENV_FILE="$RUNNER_TEMP/compass.env" pnpm test:e2e
+        run: node scripts/bootstrap-admin.mjs "$RUNNER_TEMP/compass.env" --ci
+      - name: Playwright auth and smoke tests
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
+        run: pnpm test:e2e
         env:
+          E2E_ENV_FILE: ${{ runner.temp }}/compass.env
           WEB_BASE_URL: https://localhost:8443
       - name: Upload scan artifacts
         if: always()

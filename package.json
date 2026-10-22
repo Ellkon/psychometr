@@ -14,7 +14,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "node --test scripts/*.test.mjs && turbo run test",
-    "test:e2e": "playwright test",
+    "test:e2e": "pnpm --filter @psychometr/shared build && playwright test",
     "check:content": "node scripts/check-content.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

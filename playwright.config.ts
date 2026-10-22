@@ -23,7 +23,9 @@ export default defineConfig({
   timeout: 30_000,
   fullyParallel: true,
   retries: process.env['CI'] ? 1 : 0,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: process.env['CI']
+    ? [['github'], ['list'], ['html', { open: 'never' }]]
+    : [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL,
     // The local/CI Caddy CA is private. Transport remains HTTPS and cookies Secure.
