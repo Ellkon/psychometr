@@ -11,6 +11,7 @@ build/
 coverage/
 playwright-report/
 test-results/
+apps/web/dev-dist/
 
 # Env and secrets
 .env

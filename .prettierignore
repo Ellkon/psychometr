@@ -1,0 +1,7 @@
+dist/
+coverage/
+node_modules/
+pnpm-lock.yaml
+apps/web/dev-dist/
+# Team-authored specs stay as-is (source of truth, docs/TZ.md).
+docs/

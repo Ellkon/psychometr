@@ -1,0 +1,42 @@
+{
+  "name": "psychometr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Клинический компас — digital assistant for therapy accompaniment (PHQ-9/GAD-7, dose diary, safety rules, alerting)",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.34.7",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "playwright test",
+    "check:content": "node scripts/check-content.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @psychometr/api db:generate",
+    "db:migrate": "pnpm --filter @psychometr/api db:migrate"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.56.0",
+    "@psychometr/shared": "workspace:*",
+    "eslint": "^10.13.0",
+    "eslint-plugin-security": "^4.2.0",
+    "prettier": "^3.9.10",
+    "turbo": "^2.6.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@tailwindcss/oxide",
+      "workbox-build"
+    ]
+  }
+}
