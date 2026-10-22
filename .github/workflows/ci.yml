@@ -25,8 +25,8 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
-      # Stage 2 adds the IDOR matrix (role x endpoint x foreign patient -> 403)
-      # when patient routes and authentication exist. No IDOR coverage claimed yet.
+      # Includes real PostgreSQL 16, migrations, DB privileges, IDOR matrix,
+      # concurrent invitation redemption, refresh replay and audit-chain tests.
       - run: pnpm test
       - run: pnpm check:content
       - run: pnpm build
@@ -102,8 +102,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Generate ephemeral build configuration outside the workspace
+        run: node scripts/init-local-env.mjs "$RUNNER_TEMP/compass.env"
       - name: Build stack images
-        run: docker compose -f infra/docker-compose.yml build
+        run: docker compose --env-file "$RUNNER_TEMP/compass.env" -f infra/docker-compose.yml build
       - run: mkdir -p .ci-reports
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -155,8 +157,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - name: 'Start stack (CI override: HTTP on loopback for scanners only)'
-        run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.ci.yml up -d --build --wait --wait-timeout 120
+      - name: Generate ephemeral secrets and synthetic test consent
+        run: node scripts/init-local-env.mjs "$RUNNER_TEMP/compass.env" --test-consent
+      - name: 'Start stack (HTTPS auth; HTTP loopback for ZAP only)'
+        run: docker compose --env-file "$RUNNER_TEMP/compass.env" -f infra/docker-compose.yml -f infra/docker-compose.ci.yml up -d --build --wait --wait-timeout 120
       - name: Verify API through Caddy
         run: curl --fail --show-error http://127.0.0.1:8080/api/health
       - name: OWASP ZAP baseline
@@ -171,11 +175,13 @@ jobs:
       - name: Install Playwright browsers
         if: ${{ !cancelled() }}
         run: pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
-      - name: Playwright smoke tests
+      - name: Bootstrap synthetic administrator and run browser auth tests
         if: ${{ !cancelled() }}
-        run: pnpm test:e2e
+        run: |
+          node scripts/bootstrap-admin.mjs "$RUNNER_TEMP/compass.env" --ci
+          E2E_ENV_FILE="$RUNNER_TEMP/compass.env" pnpm test:e2e
         env:
-          WEB_BASE_URL: http://127.0.0.1:8080
+          WEB_BASE_URL: https://localhost:8443
       - name: Upload scan artifacts
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -188,7 +194,7 @@ jobs:
           if-no-files-found: ignore
       - name: Stack diagnostics on failure
         if: failure()
-        run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.ci.yml logs --no-color
+        run: docker compose --env-file "$RUNNER_TEMP/compass.env" -f infra/docker-compose.yml -f infra/docker-compose.ci.yml logs --no-color
       - name: Stop stack
         if: always()
-        run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.ci.yml down -v
+        run: docker compose --env-file "$RUNNER_TEMP/compass.env" -f infra/docker-compose.yml -f infra/docker-compose.ci.yml down -v

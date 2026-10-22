@@ -1,78 +1,69 @@
-/**
- * Logger configuration.
- *
- * Hard rule (AGENTS.md § Безопасность, NFR S-8): personal data, clinical data,
- * passwords, tokens and invite codes must never reach logs. New sensitive fields
- * MUST be added to `redactPaths` below when they appear.
- */
 import { pino, type Logger, type LoggerOptions } from 'pino';
 
-/** Paths censored in every log record. Extend when adding sensitive fields. */
-export const redactPaths: string[] = [
-  // Credentials and tokens
+// Never log request/response bodies. This is an additional safety net for
+// structured application logs, not permission to log arbitrary payloads.
+const sensitiveFields = [
   'password',
-  '*.password',
   'passwordHash',
-  '*.passwordHash',
+  'credentialHash',
   'token',
-  '*.token',
+  'tokenHash',
   'accessToken',
-  '*.accessToken',
   'refreshToken',
-  '*.refreshToken',
   'inviteToken',
-  '*.inviteToken',
   'code',
-  '*.code',
   'inviteCode',
-  '*.inviteCode',
+  'codeHash',
+  'personalCode',
+  'deviceSecret',
+  'secretHash',
+  'firstName',
+  'lastName',
+  'middleName',
+  'phone',
+  'birthDate',
+  'snils',
+  'email',
+  'identity',
+  'answers',
+  'score',
+  'totalScore',
+  'medication',
+  'diagnosis',
+  'ciphertext',
+  'body',
+  'payload',
+  'APP_ENCRYPTION_KEY',
+  'JWT_ACCESS_SECRET',
+  'DATABASE_URL',
+  'MIGRATION_DATABASE_URL',
+];
+export const redactPaths: string[] = [
+  ...sensitiveFields.flatMap((field) => [field, `*.${field}`, `*.*.${field}`]),
   'req.headers.authorization',
   'req.headers.cookie',
   'res.headers["set-cookie"]',
-  // Personal data (patient_identity, 152-ФЗ)
-  'firstName',
-  '*.firstName',
-  'lastName',
-  '*.lastName',
-  'middleName',
-  '*.middleName',
-  'phone',
-  '*.phone',
-  'birthDate',
-  '*.birthDate',
-  'snils',
-  '*.snils',
-  'email',
-  '*.email',
-  // Clinical data
-  'answers',
-  '*.answers',
-  'score',
-  '*.score',
-  'totalScore',
-  '*.totalScore',
-  'medication',
-  '*.medication',
-  'diagnosis',
-  '*.diagnosis',
 ];
-
 export function buildLoggerOptions(level: LoggerOptions['level']): LoggerOptions {
   return {
     level,
     redact: { paths: redactPaths, censor: '[REDACTED]' },
-    // Never log the payload of requests: it may contain clinical data.
     serializers: {
-      req(req: { method: string; url: string; id: string }) {
-        return { method: req.method, url: req.url, id: req.id };
+      // URLs may contain invite tokens, query secrets, or other personal data.
+      // Only the declared route template is safe (not raw url/originalUrl).
+      req(req: { method: string; id: string; routeOptions?: { url?: string } }) {
+        return { method: req.method, id: req.id, route: req.routeOptions?.url ?? 'unmatched' };
       },
       res(res: { statusCode: number }) {
         return { statusCode: res.statusCode };
       },
+      // SQL/parser error messages, stacks and causes may embed user input.
+      err() {
+        return { type: 'Error', detail: '[REDACTED]' };
+      },
     },
   };
 }
-
 export function createLogger(level: LoggerOptions['level']): Logger {
   return pino(buildLoggerOptions(level));
 }

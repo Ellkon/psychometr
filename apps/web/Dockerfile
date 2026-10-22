@@ -24,7 +24,10 @@ RUN go mod init psychometr.local/caddy \
 
 FROM caddy:2.11.7-alpine AS runtime
 COPY --from=caddy-build /caddy /usr/bin/caddy
-RUN setcap cap_net_bind_service=+ep /usr/bin/caddy
+RUN setcap cap_net_bind_service=+ep /usr/bin/caddy \
+    && addgroup -S caddy && adduser -S -D -H -G caddy caddy \
+    && chown -R caddy:caddy /data /config
 COPY --from=build /app/apps/web/dist /srv
 COPY infra/Caddyfile /etc/caddy/Caddyfile
+USER caddy
 EXPOSE 80 443

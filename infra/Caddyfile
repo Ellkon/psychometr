@@ -1,12 +1,18 @@
-# Main Caddyfile (production-shaped contour, NFR S-1):
-# HTTPS only with HSTS; the plain HTTP listener redirects to HTTPS.
-# CSP mirrors apps/api/src/plugins/security.ts — keep them in sync.
-
+# HTTPS-only entry point. No request objects (URI, cookies, headers) in logs.
 {
 	admin off
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request delete
+			}
+		}
+	}
 }
 
-(web-common) {
+https://{$APP_HOST:localhost} {
+	tls internal
 	encode zstd gzip
 	header {
 		Referrer-Policy "no-referrer"
@@ -17,20 +23,11 @@
 		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		-Server
 	}
-}
-
-http://:80 {
-	redir https://{host}{uri} permanent
-}
-
-https://:443 {
-	import web-common
-	tls internal
-
+	@private path /api/* /i/* /invite /login /patient-login /patients/* /admin /audit
+	header @private Cache-Control "no-store"
 	handle /api/* {
 		reverse_proxy api:3000
 	}
-
 	handle {
 		root * /srv
 		try_files {path} /index.html

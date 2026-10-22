@@ -1,27 +1,15 @@
 #!/bin/sh
-# DB roles bootstrap (NFR S-4): the app connects as `app` (DML only, for
-# audit_event INSERT/SELECT only), migrations run as `migrator` (DDL).
-# Executed once by the postgres entrypoint on an empty data volume.
+# Runs only on a new volume. psql's quoted variables safely escape passwords.
 set -eu
-
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-	DO \$\$
-	BEGIN
-	  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app') THEN
-	    CREATE ROLE app LOGIN PASSWORD '${POSTGRES_APP_PASSWORD}';
-	  END IF;
-	  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'migrator') THEN
-	    CREATE ROLE migrator LOGIN PASSWORD '${POSTGRES_MIGRATOR_PASSWORD}';
-	  END IF;
-	END
-	\$\$;
-	GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO app;
-	GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO migrator;
-EOSQL
-
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-	GRANT USAGE, CREATE ON SCHEMA public TO migrator;
-	GRANT USAGE ON SCHEMA public TO app;
-EOSQL
-
-echo "db-init: roles app and migrator are ready"
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+  --set=app_password="$POSTGRES_APP_PASSWORD" \
+  --set=migrator_password="$POSTGRES_MIGRATOR_PASSWORD" \
+  --set=db_name="$POSTGRES_DB" <<'SQL'
+CREATE ROLE app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'app_password';
+CREATE ROLE migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'migrator_password';
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT CONNECT ON DATABASE :"db_name" TO app, migrator;
+GRANT CREATE ON DATABASE :"db_name" TO migrator;
+GRANT USAGE, CREATE ON SCHEMA public TO migrator;
+GRANT USAGE ON SCHEMA public TO app;
+SQL

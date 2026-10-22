@@ -1,13 +1,6 @@
-# Клинический компас — development / demo stack (NFR S-1).
-#
-# - PostgreSQL is reachable ONLY from the internal docker network (no ports
-#   published). API is reachable only through the `web` (Caddy) proxy.
-# - Production deployments MUST override passwords via .env (see .env.example).
-#   The :-defaults below are well-known dev-only values for local demo and CI.
-# - TLS: Caddy terminates HTTPS with an internal CA (self-signed). Real
-#   certificates are provisioned at deploy time (NFR-5: hosting in RF).
+# Synthetic/demo deployment. No real patient data before the security/legal audit.
+# Initialize a private env file with `pnpm setup:local`; never use shared defaults.
 name: psychometr
-
 services:
   db:
     image: postgres:16-alpine
@@ -15,20 +8,46 @@ services:
     environment:
       POSTGRES_DB: psychometr
       POSTGRES_USER: psychometr
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-postgres-password}
-      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-dev-only-app-password}
-      POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:-dev-only-migrator-password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run pnpm setup:local}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Run pnpm setup:local}
+      POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:?Run pnpm setup:local}
+    command:
+      [
+        'postgres',
+        '-c',
+        'log_statement=none',
+        '-c',
+        'log_min_error_statement=panic',
+        '-c',
+        'log_error_verbosity=terse',
+        '-c',
+        'log_parameter_max_length=0',
+        '-c',
+        'log_parameter_max_length_on_error=0',
+      ]
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
-    # No `ports:` on purpose — internal network only.
-    networks:
-      - internal
+    networks: [database]
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U psychometr -d psychometr']
       interval: 5s
       timeout: 3s
       retries: 20
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    image: psychometr-api:local
+    command: ['node', 'apps/api/dist/cli/migrate.js']
+    restart: 'no'
+    environment:
+      MIGRATION_DATABASE_URL: postgresql://migrator:${POSTGRES_MIGRATOR_PASSWORD:?Run pnpm setup:local}@db:5432/psychometr
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
 
   api:
     build:
@@ -41,19 +60,26 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       LOG_LEVEL: info
-      DATABASE_URL: postgresql://app:${POSTGRES_APP_PASSWORD:-dev-only-app-password}@db:5432/psychometr
+      TRUST_PROXY: one-hop
+      DATABASE_URL: postgresql://app:${POSTGRES_APP_PASSWORD:?Run pnpm setup:local}@db:5432/psychometr
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Run pnpm setup:local}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Run pnpm setup:local}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-https://localhost:8443}
+      CONSENT_VERSION: ${CONSENT_VERSION:-}
+      CONSENT_TEXT_PATH: ${CONSENT_TEXT_PATH:-}
+    volumes:
+      - ./consent:/run/consent:ro
     depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - internal
+      migrate:
+        condition: service_completed_successfully
+    networks: [database, frontend]
     healthcheck:
       test:
         [
           'CMD',
           'node',
           '-e',
-          "fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:3000/api/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
@@ -65,17 +91,24 @@ services:
       dockerfile: apps/web/Dockerfile
     image: psychometr-web:local
     restart: unless-stopped
+    environment:
+      APP_HOST: ${APP_HOST:-localhost}
     ports:
       - '8443:443'
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
     depends_on:
       api:
         condition: service_healthy
-    networks:
-      - internal
+    networks: [frontend]
 
 networks:
-  internal:
+  database:
+    internal: true
+  frontend:
     driver: bridge
-
 volumes:
   db-data:
+  caddy-data:
+  caddy-config:

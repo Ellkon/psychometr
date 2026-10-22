@@ -6,9 +6,10 @@ import { describe, expect, it } from 'vitest';
 
 import { buildApp } from './app.js';
 import { loadEnv } from './env.js';
+import { testEnv } from './testing/env.js';
 
 async function buildTestApp() {
-  const env = loadEnv({ NODE_ENV: 'test', LOG_LEVEL: 'silent' });
+  const env = testEnv();
   return buildApp({ env, silent: true });
 }
 
@@ -59,8 +60,9 @@ describe('loadEnv', () => {
   });
 
   it('applies defaults for non-secret values', () => {
-    const env = loadEnv({});
+    const env = testEnv();
     expect(env.PORT).toBe(3000);
-    expect(env.NODE_ENV).toBe('development');
+    expect(env.NODE_ENV).toBe('test');
+    expect(() => loadEnv({})).toThrow(/Invalid environment/);
   });
 });

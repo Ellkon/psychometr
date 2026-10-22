@@ -11,3 +11,8 @@ docs
 e2e
 backups
 *.md
+
+**/test-results
+infra/consent/*.txt
+**/playwright-report
+**/*.log

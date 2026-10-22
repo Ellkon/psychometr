@@ -14,3 +14,7 @@ export {
   type SourceKind,
   type SourcesFile,
 } from './sources.js';
+
+export * from './access.js';
+
+export type { ZodType as ResponseSchema } from 'zod';

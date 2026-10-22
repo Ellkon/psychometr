@@ -39,6 +39,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY content ./content
+COPY apps/api/drizzle ./apps/api/drizzle
 
 USER node
 EXPOSE 3000

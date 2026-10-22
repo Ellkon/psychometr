@@ -1,12 +1,16 @@
-# CI-only Caddyfile: plain HTTP on the internal network so OWASP ZAP baseline
-# can scan the stack without TLS interception issues. NOT used in production —
-# the production-shaped contour is Caddyfile (HTTPS + HSTS).
-
+# HTTPS for secure auth cookies; HTTP loopback is solely for the ZAP baseline.
 {
 	admin off
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request delete
+			}
+		}
+	}
 }
-
-:80 {
+(ci-app) {
 	encode zstd gzip
 	header {
 		Referrer-Policy "no-referrer"
@@ -16,14 +20,22 @@
 		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		-Server
 	}
-
+	@private path /api/* /i/* /invite /login /patient-login /patients/* /admin /audit
+	header @private Cache-Control "no-store"
 	handle /api/* {
 		reverse_proxy api:3000
 	}
-
 	handle {
 		root * /srv
 		try_files {path} /index.html
 		file_server
 	}
+}
+http://:80 {
+	import ci-app
+}
+https://localhost {
+	tls internal
+	header Strict-Transport-Security "max-age=15552000; includeSubDomains"
+	import ci-app
 }

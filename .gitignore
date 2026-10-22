@@ -32,3 +32,6 @@ backups/
 .vscode/
 .idea/
 .DS_Store
+
+# Site-specific approved consent text
+infra/consent/*.txt

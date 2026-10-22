@@ -19,24 +19,41 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "pnpm --filter @psychometr/api db:generate",
-    "db:migrate": "pnpm --filter @psychometr/api db:migrate"
+    "db:migrate": "pnpm --filter @psychometr/api db:migrate",
+    "setup:local": "node scripts/init-local-env.mjs",
+    "admin:create": "pnpm --filter @psychometr/api admin:create",
+    "admin:bootstrap": "node scripts/bootstrap-admin.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.56.0",
     "@psychometr/shared": "workspace:*",
-    "eslint": "^10.13.0",
+    "eslint": "10.12.0",
     "eslint-plugin-security": "^4.2.0",
     "prettier": "^3.9.10",
-    "turbo": "^2.6.0",
+    "turbo": "2.11.8",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.72.0"
+    "typescript-eslint": "8.71.2"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
       "@tailwindcss/oxide",
-      "workbox-build"
-    ]
+      "workbox-build",
+      "@embedded-postgres/darwin-arm64",
+      "@embedded-postgres/darwin-x64",
+      "@embedded-postgres/linux-arm",
+      "@embedded-postgres/linux-arm64",
+      "@embedded-postgres/linux-ia32",
+      "@embedded-postgres/linux-ppc64",
+      "@embedded-postgres/linux-x64",
+      "@embedded-postgres/windows-x64"
+    ],
+    "overrides": {
+      "vite": "8.3.4",
+      "@trickfilm400/rollup-plugin-off-main-thread": "4.0.0",
+      "semver@6.3.1": "7.7.3",
+      "browserslist": "4.29.3"
+    }
   }
 }
