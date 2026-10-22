@@ -19,18 +19,20 @@ infra/             docker compose, Caddy, скрипты бэкапа
 
 ## Команды
 
-Скелет monorepo ещё не создан. Целевые команды:
+pnpm глобально не ставится: используй `npx pnpm@12.15.0 <команда>` (или `corepack enable`). Хранилище пакетов лежит в `.pnpm-store/` внутри репозитория. Подробности запуска — в `README.md` и `docs/development/stage-2.md`.
 
 ```bash
 pnpm install
+pnpm setup:local      # .env со случайными секретами (0600), не перезаписывает существующий
 pnpm dev              # api + web
-pnpm test             # vitest во всех пакетах
-pnpm test:e2e         # playwright
+pnpm test             # node --test + vitest во всех пакетах (одноразовый PostgreSQL поднимается сам)
+pnpm test:e2e         # playwright против запущенного HTTPS-стенда
 pnpm lint
 pnpm typecheck
 pnpm db:generate      # drizzle-kit generate
-pnpm db:migrate
-docker compose up -d  # postgres, api, web/caddy
+pnpm db:migrate       # под ролью migrator
+docker compose --env-file .env -f infra/docker-compose.yml up -d --build  # postgres, api, web/caddy
+pnpm admin:bootstrap  # первый администратор
 ```
 
 Перед тем как сообщить, что задача сделана, запусти `pnpm lint && pnpm typecheck && pnpm test`.
@@ -98,8 +100,10 @@ docker compose up -d  # postgres, api, web/caddy
 
 - Одна ветка на задачу: `feat/<кратко>`, `fix/<кратко>`, `chore/<кратко>`.
 - Conventional Commits: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`, `security:`.
-- Изменения попадают в `main` только через PR. Перед merge проводится security review диффа: встроенной командой твоего инструмента (например, `/security-review` в Claude Code) или вручную по разделу «Безопасность» этого файла.
-- Агент не делает `push --force` в `main`, не переписывает историю `main` и не пушит без явной просьбы.
+- Ветки: `development` — интеграционная, `main` — релизная.
+- Ветки задач создаются от `development` и попадают в неё только через PR. В `main` изменения попадают только через PR из `development`.
+- Перед merge в `development` и в `main` проводится security review диффа: встроенной командой твоего инструмента (например, `/security-review` в Claude Code) или вручную по разделу «Безопасность» этого файла.
+- Агент не делает `push --force` в `main` и `development`, не переписывает их историю и не пушит без явной просьбы.
 
 ## Чего не делать
 

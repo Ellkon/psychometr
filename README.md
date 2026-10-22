@@ -18,7 +18,7 @@ PWA-ассистент врача для сопровождения терапи
 
 ## Быстрый старт: изолированный локальный стенд
 
-Нужны Node 22, pnpm 10.34.7 и Docker Compose v2.
+Нужны Node 22, pnpm 12.15.0 и Docker Compose v2.
 
 ```bash
 corepack enable
