@@ -40,7 +40,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/i\//, /^\/invite/],
       },
       devOptions: { enabled: false },
     }),
@@ -48,6 +48,8 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    allowedHosts: ['.e2b.app'],
+    headers: { 'Referrer-Policy': 'no-referrer' },
     proxy: {
       '/api': {
         target: process.env['API_PROXY_TARGET'] ?? 'http://127.0.0.1:3000',
