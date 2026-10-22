@@ -12,14 +12,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: [
-      '**/dist/**',
-      '**/coverage/**',
-      '**/node_modules/**',
-      '**/.turbo/**',
-      '**/dev-dist/**',
-      'e2e/**',
-    ],
+    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', '**/dev-dist/**', 'e2e/**'],
   },
   eslint.configs.recommended,
   security.configs.recommended,

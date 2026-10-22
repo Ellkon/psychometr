@@ -4,16 +4,16 @@
   "private": true,
   "description": "Клинический компас — digital assistant for therapy accompaniment (PHQ-9/GAD-7, dose diary, safety rules, alerting)",
   "license": "UNLICENSED",
-  "packageManager": "pnpm@10.34.7",
+  "packageManager": "pnpm@12.15.0",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
-    "test": "node --test scripts/*.test.mjs && turbo run test",
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter @psychometr/shared build && pnpm --parallel --filter @psychometr/shared --filter @psychometr/api --filter @psychometr/web dev",
+    "lint": "pnpm --filter @psychometr/shared build && pnpm -r lint",
+    "typecheck": "pnpm --filter @psychometr/shared build && pnpm -r typecheck",
+    "test": "node --test scripts/*.test.mjs && pnpm --filter @psychometr/shared build && pnpm -r test",
     "test:e2e": "pnpm --filter @psychometr/shared build && playwright test",
     "check:content": "node scripts/check-content.mjs",
     "format": "prettier --write .",
@@ -31,29 +31,7 @@
     "eslint": "10.12.0",
     "eslint-plugin-security": "^4.2.0",
     "prettier": "^3.9.10",
-    "turbo": "2.11.8",
     "typescript": "^5.9.3",
     "typescript-eslint": "8.71.2"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "@tailwindcss/oxide",
-      "workbox-build",
-      "@embedded-postgres/darwin-arm64",
-      "@embedded-postgres/darwin-x64",
-      "@embedded-postgres/linux-arm",
-      "@embedded-postgres/linux-arm64",
-      "@embedded-postgres/linux-ia32",
-      "@embedded-postgres/linux-ppc64",
-      "@embedded-postgres/linux-x64",
-      "@embedded-postgres/windows-x64"
-    ],
-    "overrides": {
-      "vite": "8.3.4",
-      "@trickfilm400/rollup-plugin-off-main-thread": "4.0.0",
-      "semver@6.3.1": "7.7.3",
-      "browserslist": "4.29.3"
-    }
   }
 }

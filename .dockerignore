@@ -3,7 +3,7 @@
 **/.env.*
 **/dist
 **/coverage
-**/.turbo
+.pnpm-store
 .git
 .github
 .ci-reports
