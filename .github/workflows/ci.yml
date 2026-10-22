@@ -1,0 +1,158 @@
+# CI for every PR (NFR-2, docs/TZ.md §5):
+# - lint / typecheck / unit tests (incl. IDOR matrix from stage 2 on)
+# - gitleaks (no secrets in history)
+# - semgrep (p/typescript, p/owasp-top-ten, p/jwt)
+# - pnpm audit --audit-level=high
+# - Trivy fs + images (fail on HIGH/CRITICAL)
+# - OWASP ZAP baseline against the docker compose stack
+# - Playwright smoke e2e against the same stack
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [development]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: lint · typecheck · tests · content
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      # Unit tests. From stage 2 on this includes the IDOR matrix
+      # (role x endpoint x foreign patient -> 403) required by NFR-2.
+      - run: pnpm test
+      - run: pnpm check:content
+
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Required for organization accounts only; personal repos run without it.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  semgrep:
+    name: semgrep
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v7
+      - run: >
+          semgrep scan
+          --config p/typescript
+          --config p/owasp-top-ten
+          --config p/jwt
+          --error
+          --metrics=off
+          .
+
+  audit:
+    name: pnpm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level=high
+
+  trivy:
+    name: trivy fs + images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build stack images
+        run: docker compose -f infra/docker-compose.yml build
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+      - name: Trivy image scan (api)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: psychometr-api:local
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+      - name: Trivy image scan (web)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: psychometr-web:local
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+  stack:
+    name: ZAP baseline + Playwright
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 'Start stack (CI override: plain HTTP on 127.0.0.1:8080 for scanners)'
+        run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.ci.yml up -d --build
+      - name: Wait for the stack to be healthy
+        run: |
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8080/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "stack did not become healthy in time" >&2
+          docker compose -f infra/docker-compose.yml logs
+          exit 1
+      - name: OWASP ZAP baseline
+        run: |
+          docker run --network host \
+            -v "$PWD:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://127.0.0.1:8080 -I -r zap-baseline.html -T 5 -m 1
+      - name: Install Playwright browsers
+        run: pnpm install --frozen-lockfile && npx playwright install --with-deps chromium
+      - name: Playwright smoke tests
+        run: pnpm test:e2e
+        env:
+          WEB_BASE_URL: http://127.0.0.1:8080
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scan-reports
+          path: |
+            zap-baseline.html
+            playwright-report/
+          if-no-files-found: ignore
+      - name: Stop stack
+        if: always()
+        run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.ci.yml down -v
