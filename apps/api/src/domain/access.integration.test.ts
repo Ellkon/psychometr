@@ -621,6 +621,15 @@ it('audits only technical identifiers and enforces append-only and no-DDL databa
   await expect(f.db.execute(sql`create table forbidden_ddl (id integer)`)).rejects.toThrow();
   await expect(f.db.execute(sql`update consents set version = 'changed'`)).rejects.toThrow();
 });
+it('limits the runtime role to the columns and deletes the API needs', async () => {
+  await f.enroll();
+  await expect(f.db.execute(sql`update users set role = 'admin'`)).rejects.toThrow();
+  await expect(f.db.execute(sql`update patients set user_id = user_id`)).rejects.toThrow();
+  await expect(f.db.execute(sql`update patient_invites set token_hash = 'x'`)).rejects.toThrow();
+  await expect(f.db.execute(sql`delete from patient_identity`)).rejects.toThrow();
+  await expect(f.db.execute(sql`delete from users`)).rejects.toThrow();
+  await expect(f.db.execute(sql`delete from patients`)).rejects.toThrow();
+});
 it('serializes concurrent audit appends without breaking the chain', async () => {
   await Promise.all(
     Array.from({ length: 12 }, () =>

@@ -8,6 +8,15 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
 CREATE ROLE app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'app_password';
 CREATE ROLE migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'migrator_password';
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON DATABASE :"db_name" FROM PUBLIC;
+-- Bound runaway queries, stuck transactions and connection floods per role.
+ALTER ROLE app CONNECTION LIMIT 30;
+ALTER ROLE app SET search_path = public;
+ALTER ROLE app SET statement_timeout = '10s';
+ALTER ROLE app SET lock_timeout = '5s';
+ALTER ROLE app SET idle_in_transaction_session_timeout = '30s';
+ALTER ROLE migrator CONNECTION LIMIT 2;
+ALTER ROLE migrator SET search_path = public;
 GRANT CONNECT ON DATABASE :"db_name" TO app, migrator;
 GRANT CREATE ON DATABASE :"db_name" TO migrator;
 GRANT USAGE, CREATE ON SCHEMA public TO migrator;
