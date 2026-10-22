@@ -23,6 +23,11 @@ COPY apps/api/package.json apps/api/
 RUN pnpm install --prod --frozen-lockfile
 
 FROM node:22-alpine AS runtime
+# The runtime invokes Node directly. Remove unused package managers and their
+# vulnerable transitive dependencies; application dependencies stay intact.
+RUN rm -rf /usr/local/lib/node_modules /opt/yarn-* \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+        /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/pnpm /usr/local/bin/pnpx
 ENV NODE_ENV=production
 WORKDIR /app
 

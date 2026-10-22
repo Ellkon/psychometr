@@ -13,7 +13,18 @@ COPY packages/shared packages/shared
 COPY apps/web apps/web
 RUN pnpm --filter @psychometr/shared build && pnpm --filter @psychometr/web build
 
-FROM caddy:2-alpine AS runtime
+# The official 2.11.7 binary embeds vulnerable Go 1.26.8 and x/net 0.59.0.
+# Rebuild the same release with patched dependencies instead of ignoring CVEs.
+FROM golang:1.27.3-alpine AS caddy-build
+WORKDIR /src
+RUN go mod init psychometr.local/caddy \
+    && go get github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.7 golang.org/x/net@v0.60.0 \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /caddy \
+        github.com/caddyserver/caddy/v2/cmd/caddy
+
+FROM caddy:2.11.7-alpine AS runtime
+COPY --from=caddy-build /caddy /usr/bin/caddy
+RUN setcap cap_net_bind_service=+ep /usr/bin/caddy
 COPY --from=build /app/apps/web/dist /srv
 COPY infra/Caddyfile /etc/caddy/Caddyfile
 EXPOSE 80 443
