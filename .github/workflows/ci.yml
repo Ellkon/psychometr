@@ -1,11 +1,4 @@
-# CI for every PR (NFR-2, docs/TZ.md §5):
-# - lint / typecheck / unit tests (incl. IDOR matrix from stage 2 on)
-# - gitleaks (no secrets in history)
-# - semgrep (p/typescript, p/owasp-top-ten, p/jwt)
-# - pnpm audit --audit-level=high
-# - Trivy fs + images (fail on HIGH/CRITICAL)
-# - OWASP ZAP baseline against the docker compose stack
-# - Playwright smoke e2e against the same stack
+# Security gates required by NFR-2 (docs/TZ.md §5).
 name: CI
 
 on:
@@ -20,7 +13,7 @@ permissions:
 jobs:
   quality:
     name: lint · typecheck · tests · content
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -32,43 +25,67 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
-      # Unit tests. From stage 2 on this includes the IDOR matrix
-      # (role x endpoint x foreign patient -> 403) required by NFR-2.
+      # Stage 2 adds the IDOR matrix (role x endpoint x foreign patient -> 403)
+      # when patient routes and authentication exist. No IDOR coverage claimed yet.
       - run: pnpm test
       - run: pnpm check:content
+      - run: pnpm build
 
   secrets:
     name: gitleaks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      GITLEAKS_VERSION: 8.30.1
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Required for organization accounts only; personal repos run without it.
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          persist-credentials: false
+      # Use the MIT-licensed CLI, not the separately licensed gitleaks-action.
+      # No PR write permissions, license key, or third-party API calls are needed.
+      - name: Install Gitleaks (verified release archive)
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          cd "$RUNNER_TEMP/gitleaks"
+          release="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location "$release/$archive" -o "$archive"
+          curl --fail --silent --show-error --location \
+            "$release/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o checksums.txt
+          grep " ${archive}$" checksums.txt | sha256sum --check --strict
+          tar xzf "$archive" gitleaks
+      - name: Scan complete Git history (redacted)
+        run: |
+          mkdir -p .ci-reports
+          "$RUNNER_TEMP/gitleaks/gitleaks" git . --log-opts=--all --redact=100 \
+            --report-format=json --report-path=.ci-reports/gitleaks.json
+      - name: Annotate secret locations without values
+        if: always()
+        run: node scripts/annotate-security.mjs gitleaks .ci-reports/gitleaks.json
 
   semgrep:
     name: semgrep
-    runs-on: ubuntu-latest
-    container:
-      image: semgrep/semgrep
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - run: >
-          semgrep scan
-          --config p/typescript
-          --config p/owasp-top-ten
-          --config p/jwt
-          --error
-          --metrics=off
-          .
+        with:
+          persist-credentials: false
+      - name: Scan with all required rule packs
+        run: |
+          mkdir -p .ci-reports
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/src" -w /src semgrep/semgrep:1.182.1 \
+            semgrep scan --config p/typescript --config p/owasp-top-ten --config p/jwt \
+            --error --strict --metrics=off --disable-version-check \
+            --json-output=.ci-reports/semgrep.json .
+      - name: Annotate findings
+        if: always()
+        run: node scripts/annotate-security.mjs semgrep .ci-reports/semgrep.json
 
   audit:
     name: pnpm audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -81,11 +98,12 @@ jobs:
 
   trivy:
     name: trivy fs + images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Build stack images
         run: docker compose -f infra/docker-compose.yml build
+      - run: mkdir -p .ci-reports
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -93,25 +111,42 @@ jobs:
           scan-ref: .
           severity: HIGH,CRITICAL
           exit-code: '1'
-          ignore-unfixed: true
+          ignore-unfixed: false
+          format: json
+          output: .ci-reports/trivy-fs.json
+      - name: Annotate filesystem findings
+        if: always()
+        run: node scripts/annotate-security.mjs trivy .ci-reports/trivy-fs.json
       - name: Trivy image scan (api)
+        if: ${{ !cancelled() }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: psychometr-api:local
           severity: HIGH,CRITICAL
           exit-code: '1'
-          ignore-unfixed: true
+          ignore-unfixed: false
+          format: json
+          output: .ci-reports/trivy-api.json
+      - name: Annotate API image findings
+        if: always()
+        run: node scripts/annotate-security.mjs trivy .ci-reports/trivy-api.json
       - name: Trivy image scan (web)
+        if: ${{ !cancelled() }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: psychometr-web:local
           severity: HIGH,CRITICAL
           exit-code: '1'
-          ignore-unfixed: true
+          ignore-unfixed: false
+          format: json
+          output: .ci-reports/trivy-web.json
+      - name: Annotate web image findings
+        if: always()
+        run: node scripts/annotate-security.mjs trivy .ci-reports/trivy-web.json
 
   stack:
     name: ZAP baseline + Playwright
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -119,28 +154,24 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - name: 'Start stack (CI override: plain HTTP on 127.0.0.1:8080 for scanners)'
-        run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.ci.yml up -d --build
-      - name: Wait for the stack to be healthy
-        run: |
-          for i in $(seq 1 45); do
-            if curl -fsS http://127.0.0.1:8080/api/health; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "stack did not become healthy in time" >&2
-          docker compose -f infra/docker-compose.yml logs
-          exit 1
+      - name: 'Start stack (CI override: HTTP on loopback for scanners only)'
+        run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.ci.yml up -d --build --wait --wait-timeout 120
+      - name: Verify API through Caddy
+        run: curl --fail --show-error http://127.0.0.1:8080/api/health
       - name: OWASP ZAP baseline
         run: |
-          docker run --network host \
-            -v "$PWD:/zap/wrk:rw" \
+          mkdir -p .ci-reports/zap
+          # Only this disposable report directory is writable by the ZAP user.
+          chmod 777 .ci-reports/zap
+          docker run --rm --network host \
+            -v "$PWD/.ci-reports/zap:/zap/wrk:rw" \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py -t http://127.0.0.1:8080 -I -r zap-baseline.html -T 5 -m 1
       - name: Install Playwright browsers
-        run: pnpm install --frozen-lockfile && npx playwright install --with-deps chromium
+        if: ${{ !cancelled() }}
+        run: pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
       - name: Playwright smoke tests
+        if: ${{ !cancelled() }}
         run: pnpm test:e2e
         env:
           WEB_BASE_URL: http://127.0.0.1:8080
@@ -150,9 +181,13 @@ jobs:
         with:
           name: scan-reports
           path: |
-            zap-baseline.html
+            .ci-reports/zap/zap-baseline.html
             playwright-report/
+          include-hidden-files: true
           if-no-files-found: ignore
+      - name: Stack diagnostics on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.ci.yml logs --no-color
       - name: Stop stack
         if: always()
         run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.ci.yml down -v

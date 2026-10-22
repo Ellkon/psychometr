@@ -32,7 +32,7 @@ for (const [fileName, schema] of Object.entries(VALIDATORS)) {
     console.log(`ok: content/${fileName}`);
   } catch (error) {
     failed = true;
-    console.error(`FAIL: content/${fileName}:`, error instanceof Error ? error.message : error);
+    console.error('FAIL: content/%s: %s', fileName, error instanceof Error ? error.message : error);
   }
 }
 

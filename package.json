@@ -13,7 +13,7 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
+    "test": "node --test scripts/*.test.mjs && turbo run test",
     "test:e2e": "playwright test",
     "check:content": "node scripts/check-content.mjs",
     "format": "prettier --write .",
