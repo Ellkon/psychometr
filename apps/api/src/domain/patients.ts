@@ -119,6 +119,11 @@ export class PatientService {
     );
   }
   async createInvite(user: Principal, patientId: string) {
+    // argon2 runs before the transaction: appendAudit holds a global advisory
+    // lock, and hashing under it would stall every audit write in the system.
+    const token = newOpaqueToken(),
+      code = newInviteCode();
+    const codeHash = await hashCredential(code);
     return authorized(
       this.db,
       user,
@@ -139,8 +144,6 @@ export class PatientService {
             { action: 'invite.revoked', actorId: user.id, resourceId: patientId },
             now,
           );
-        const token = newOpaqueToken(),
-          code = newInviteCode();
         const expiresAt = new Date(now.getTime() + 72 * 60 * 60 * 1000);
         const [invite] = await tx
           .insert(patientInvites)
@@ -149,7 +152,7 @@ export class PatientService {
             userId: patient.userId,
             createdBy: user.id,
             tokenHash: digest(token),
-            codeHash: await hashCredential(code),
+            codeHash,
             expiresAt,
           })
           .returning({ id: patientInvites.id });
