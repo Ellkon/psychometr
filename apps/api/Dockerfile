@@ -3,23 +3,37 @@ FROM node:22-alpine AS build
 RUN corepack enable
 WORKDIR /app
 
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml turbo.json ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml turbo.json tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 RUN pnpm install --frozen-lockfile
 
 COPY packages/shared packages/shared
 COPY apps/api apps/api
-COPY content content
 RUN pnpm --filter @psychometr/shared build && pnpm --filter @psychometr/api build
 
-FROM node:22-alpine AS runtime
+# pnpm prune is not recursive in a workspace. Install runtime dependencies in a
+# clean stage instead, preserving the workspace symlinks without dev packages.
+FROM node:22-alpine AS production-deps
 RUN corepack enable
+WORKDIR /app
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/shared/package.json packages/shared/
+COPY apps/api/package.json apps/api/
+RUN pnpm install --prod --frozen-lockfile
+
+FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
-COPY --from=build /app ./
-RUN pnpm prune --prod
+COPY --from=production-deps /app/node_modules ./node_modules
+COPY --from=production-deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=production-deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY apps/api/package.json ./apps/api/
+COPY packages/shared/package.json ./packages/shared/
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY content ./content
 
 USER node
 EXPOSE 3000

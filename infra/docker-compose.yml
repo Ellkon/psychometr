@@ -41,7 +41,7 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       LOG_LEVEL: info
-      DATABASE_URL: postgresql://psychometr:${POSTGRES_PASSWORD:-dev-only-postgres-password}@db:5432/psychometr
+      DATABASE_URL: postgresql://app:${POSTGRES_APP_PASSWORD:-dev-only-app-password}@db:5432/psychometr
     depends_on:
       db:
         condition: service_healthy
