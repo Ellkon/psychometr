@@ -1,0 +1,9 @@
+# CI-only override: expose the web service over plain HTTP on localhost so the
+# OWASP ZAP baseline job (and Playwright smoke tests) can reach the stack.
+# The default contour in docker-compose.yml stays HTTPS-only (NFR S-1).
+services:
+  web:
+    ports:
+      - '127.0.0.1:8080:80'
+    volumes:
+      - ./Caddyfile.ci:/etc/caddy/Caddyfile:ro

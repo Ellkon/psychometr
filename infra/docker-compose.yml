@@ -1,0 +1,81 @@
+# Клинический компас — development / demo stack (NFR S-1).
+#
+# - PostgreSQL is reachable ONLY from the internal docker network (no ports
+#   published). API is reachable only through the `web` (Caddy) proxy.
+# - Production deployments MUST override passwords via .env (see .env.example).
+#   The :-defaults below are well-known dev-only values for local demo and CI.
+# - TLS: Caddy terminates HTTPS with an internal CA (self-signed). Real
+#   certificates are provisioned at deploy time (NFR-5: hosting in RF).
+name: psychometr
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: psychometr
+      POSTGRES_USER: psychometr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-postgres-password}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-dev-only-app-password}
+      POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:-dev-only-migrator-password}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    # No `ports:` on purpose — internal network only.
+    networks:
+      - internal
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U psychometr -d psychometr']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    image: psychometr-api:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      LOG_LEVEL: info
+      DATABASE_URL: postgresql://psychometr:${POSTGRES_PASSWORD:-dev-only-postgres-password}@db:5432/psychometr
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    image: psychometr-web:local
+    restart: unless-stopped
+    ports:
+      - '8443:443'
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  db-data:

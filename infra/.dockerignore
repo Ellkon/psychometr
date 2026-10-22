@@ -1,0 +1,2 @@
+# Editor directories for local docker overrides (real .env is gitignored).
+.env
