@@ -1,3 +1,9 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+# Supply-chain protections for dependency updates (NFR-2).
+# Existing locked versions stay reproducible; new releases wait seven days.
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+blockExoticSubdeps: true
