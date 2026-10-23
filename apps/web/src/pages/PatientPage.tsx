@@ -15,6 +15,8 @@ import { AsyncForm, Button, ErrorNotice, Field } from '../components/forms.js';
 import { IdentityForm } from '../components/identity-form.js';
 import { ScalesPanel } from '../components/scales-panel.js';
 import { ClinicalCardsPanel } from '../components/clinical-cards-panel.js';
+import { TherapyPanel } from '../components/therapy-panel.js';
+import { TimelinePanel } from '../components/timeline-panel.js';
 
 const inviteStatus = (status: string) => {
   switch (status) {
@@ -101,8 +103,10 @@ export function PatientPage() {
           )}
         </CardContent>
       </Card>
+      {(user.role === 'doctor' || user.role === 'patient') && <TherapyPanel patientId={id} />}
       {(user.role === 'doctor' || user.role === 'patient') && <ScalesPanel patientId={id} />}
       {user.role === 'doctor' && <ClinicalCardsPanel patientId={id} />}
+      {user.role === 'doctor' && <TimelinePanel patientId={id} />}
       {user.role === 'doctor' && <Invitations key={id} patientId={id} />}
     </div>
   );

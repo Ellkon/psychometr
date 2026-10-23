@@ -23,4 +23,8 @@ export * from './rules.js';
 
 export * from './emergency.js';
 
+export * from './drugs.js';
+
+export * from './therapy.js';
+
 export type { ZodType as ResponseSchema } from 'zod';

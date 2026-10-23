@@ -10,6 +10,8 @@ export const SourceKindSchema = z.enum([
   'grls', // ГРЛС (drug instructions)
   'validation_study', // psychometric validation publications
   'regulation', // laws and regulatory acts
+  // Project requirement (ТЗ) without clinical evidence: allowed only for draft rules.
+  'project_requirement',
 ]);
 export type SourceKind = z.infer<typeof SourceKindSchema>;
 

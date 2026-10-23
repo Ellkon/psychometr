@@ -25,6 +25,19 @@
       "title": "Условия использования PHQ-9 и GAD-7 (PHQ Screeners, Pfizer)",
       "citation": "Формы PHQ-9 и GAD-7 с пометкой «No permission required to reproduce, translate, display or distribute» (Pfizer Inc.). Использование без разрешения и платы.",
       "url": "https://www.phqscreeners.com/terms"
+    },
+    {
+      "id": "grls",
+      "kind": "grls",
+      "title": "Государственный реестр лекарственных средств (ГРЛС), Минздрав России",
+      "citation": "Выгрузка реестра «Действующий» (grls.rosminzdrav.ru, «Загрузите ГРЛС одним файлом»). Дата выгрузки указана в content/drugs/grls-psychotropics.json (поле export_date). Используются регистрационный номер, торговое наименование, МНН и формы выпуска.",
+      "url": "https://grls.rosminzdrav.ru/GRLS.aspx"
+    },
+    {
+      "id": "tz-fr6",
+      "kind": "project_requirement",
+      "title": "ТЗ «Клинический компас», FR-6",
+      "citation": "docs/TZ.md, FR-6: «Кандидат уведомления: пропуск двух доз подряд. Порог настраивается правилом.» Требование проекта, не клинический источник: правило с этим источником не может быть активным."
     }
   ]
 }

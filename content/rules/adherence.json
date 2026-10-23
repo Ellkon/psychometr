@@ -1,0 +1,50 @@
+{
+  "note": "Кандидат уведомления из ТЗ FR-6. Клинического источника для порога нет, поэтому правило — черновик и не вычисляется. Реестр врача показывает число пропущенных подряд доз как факт, без порога.",
+  "rules": [
+    {
+      "id": "adherence_missed_two_in_row",
+      "version": "0.1.0",
+      "status": "draft",
+      "severity": "warning",
+      "source_id": "tz-fr6",
+      "source_location": "FR-6, третий пункт",
+      "message": "Пропущено две или более доз подряд по самоотчёту пациента.",
+      "suggested_action": "Уточнить у пациента причину пропусков.",
+      "reviewed_at": null,
+      "decision": {
+        "contentType": "application/vnd.gorules.decision",
+        "nodes": [
+          { "id": "in", "name": "request", "type": "inputNode", "position": { "x": 0, "y": 0 } },
+          {
+            "id": "table",
+            "name": "missed_in_row",
+            "type": "decisionTableNode",
+            "position": { "x": 200, "y": 0 },
+            "content": {
+              "hitPolicy": "first",
+              "inputs": [
+                { "id": "i1", "name": "missed_doses_in_row", "field": "missed_doses_in_row" }
+              ],
+              "outputs": [{ "id": "o1", "name": "triggered", "field": "triggered" }],
+              "rules": [
+                { "_id": "r0", "i1": "\"unknown\"", "o1": "false" },
+                { "_id": "r1", "i1": ">= 2", "o1": "true" },
+                { "_id": "r2", "i1": "", "o1": "false" }
+              ]
+            }
+          },
+          {
+            "id": "out",
+            "name": "response",
+            "type": "outputNode",
+            "position": { "x": 400, "y": 0 }
+          }
+        ],
+        "edges": [
+          { "id": "e1", "sourceId": "in", "targetId": "table", "type": "edge" },
+          { "id": "e2", "sourceId": "table", "targetId": "out", "type": "edge" }
+        ]
+      }
+    }
+  ]
+}

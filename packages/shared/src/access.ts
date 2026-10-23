@@ -154,6 +154,13 @@ export const AuditActionSchema = z.enum([
   'rule.triggered',
   'cards.viewed',
   'task.decided',
+  'medication.prescribed',
+  'medication.stopped',
+  'therapy.viewed',
+  'dose.marked',
+  'adverse_event.reported',
+  'registry.viewed',
+  'timeline.viewed',
   'access.denied',
   'audit.viewed',
 ]);

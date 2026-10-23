@@ -131,5 +131,12 @@ export async function loadRuleEngine(contentDir: string): Promise<RuleEngine> {
     );
     files.push({ category: name.replace(/\.json$/, ''), file });
   }
+  const requirementOnly = new Set(
+    sources.sources.filter((source) => source.kind === 'project_requirement').map((s) => s.id),
+  );
+  for (const { file } of files)
+    for (const rule of file.rules)
+      if (rule.status === 'active' && requirementOnly.has(rule.source_id))
+        throw new Error(`Правило ${rule.id} активно, но опирается только на требование ТЗ`);
   return compileRuleEngine(new Set(sources.sources.map((source) => source.id)), files);
 }

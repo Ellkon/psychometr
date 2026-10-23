@@ -24,6 +24,10 @@ import { ClinicalCardService } from './domain/cards.js';
 import { loadRuleEngine, type RuleEngine } from './domain/rules.js';
 import { registerCardRoutes } from './routes/cards.js';
 import { registerScaleRoutes } from './routes/scales.js';
+import { registerTherapyRoutes } from './routes/therapy.js';
+import { loadDrugRegistry } from './domain/drugs.js';
+import { RegistryService } from './domain/registry.js';
+import { TherapyService } from './domain/therapy.js';
 import { AccessTokens } from './security/access-token.js';
 import { IdentityVault } from './security/identity.js';
 
@@ -76,6 +80,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const cards = new ClinicalCardService(db, ruleEngine, options.clock);
   registerScaleRoutes(app, auth, new ScaleService(db, scaleCatalog, options.clock, cards));
   registerCardRoutes(app, auth, cards);
+  registerTherapyRoutes(
+    app,
+    auth,
+    new TherapyService(db, await loadDrugRegistry(findContentDir()), options.clock),
+    new RegistryService(db, options.clock),
+  );
   registerHealthRoutes(app, async () => {
     await db.execute(sql`select 1 from users limit 1`);
   });

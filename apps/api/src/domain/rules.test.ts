@@ -1,5 +1,11 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- Test reads the repo content directory and its own temp directory. */
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { ZenEngine } from '@gorules/zen-engine';
 import { describe, expect, it } from 'vitest';
-import { RuleFileSchema, RuleSchema } from '@psychometr/shared';
+import { z } from 'zod';
+import { RuleFactValueSchema, RuleFileSchema, RuleSchema } from '@psychometr/shared';
 import {
   syntheticRuleEngine,
   syntheticRuleFile,
@@ -10,6 +16,12 @@ import { findContentDir } from './scales.js';
 import { buildFacts, compileRuleEngine, loadRuleEngine, type ScoreSnapshot } from './rules.js';
 
 const contentDir = findContentDir();
+const CasesFileSchema = z.object({
+  rule_id: z.string(),
+  cases: z
+    .array(z.object({ facts: z.record(z.string(), RuleFactValueSchema), triggered: z.boolean() }))
+    .min(1),
+});
 const sources = new Set([
   'pogosova-phq-2014',
   'kr-457-gtr',
@@ -20,7 +32,11 @@ const sources = new Set([
 describe('product rule content', () => {
   it('loads with no active routing rules, so routing reports pending clinical agreement', async () => {
     const engine = await loadRuleEngine(contentDir);
-    expect(engine.all).toHaveLength(0);
+    // Only the adherence draft exists; nothing is evaluated.
+    expect(engine.all.map((item) => [item.rule.id, item.rule.status])).toEqual([
+      ['adherence_missed_two_in_row', 'draft'],
+    ]);
+    expect(engine.all.every((item) => item.decision === null)).toBe(true);
     expect(engine.routingStatus()).toBe('pending_clinical_agreement');
     expect(engine.activeCount('routing')).toBe(0);
   });
@@ -114,5 +130,48 @@ describe('RuleEngine.evaluate', () => {
         buildFacts(new Map([['phq9', { score: 12, bandLabel: 'x', safetySignal: false }]])),
       ),
     ).rejects.toThrow(/triggered/);
+  });
+});
+
+describe('reference cases (content/rules/__cases__)', () => {
+  it('every rule file has cases for each rule, and every case matches, drafts included', async () => {
+    const rulesDir = path.join(contentDir, 'rules');
+    const zen = new ZenEngine();
+    for (const name of (await readdir(rulesDir)).filter((file) => file.endsWith('.json'))) {
+      const file = RuleFileSchema.parse(
+        JSON.parse(await readFile(path.join(rulesDir, name), 'utf8')),
+      );
+      if (file.rules.length === 0) continue;
+      const cases = CasesFileSchema.array().parse(
+        [JSON.parse(await readFile(path.join(rulesDir, '__cases__', name), 'utf8'))].flat(),
+      );
+      for (const rule of file.rules) {
+        const ruleCases = cases.filter((entry) => entry.rule_id === rule.id);
+        expect(ruleCases.length, `cases for ${rule.id}`).toBeGreaterThan(0);
+        const decision = zen.createDecision(rule.decision);
+        for (const { facts, triggered } of ruleCases.flatMap((entry) => entry.cases)) {
+          const result = (await decision.evaluate(facts)).result as Record<string, unknown>;
+          expect(result['triggered'], `${rule.id} ${JSON.stringify(facts)}`).toBe(triggered);
+        }
+      }
+    }
+  });
+
+  it('refuses to activate a rule that cites only a project requirement', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'rules-'));
+    await mkdir(path.join(dir, 'rules'));
+    await writeFile(
+      path.join(dir, 'sources.json'),
+      JSON.stringify({
+        sources: [{ id: 'tz', kind: 'project_requirement', title: 't', citation: 'c' }],
+      }),
+    );
+    const draft = syntheticRuleFile().rules[0];
+    await writeFile(
+      path.join(dir, 'rules', 'adherence.json'),
+      JSON.stringify({ rules: [{ ...draft, source_id: 'tz' }] }),
+    );
+    await expect(loadRuleEngine(dir)).rejects.toThrow('требование ТЗ');
+    await rm(dir, { recursive: true });
   });
 });

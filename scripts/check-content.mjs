@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  DrugCatalogFileSchema,
   EmergencyFileSchema,
   RuleFileSchema,
   ScaleFileSchema,
@@ -26,7 +27,9 @@ const VALIDATORS = {
   'scales/phq9.ru.json': ScaleFileSchema,
   'scales/gad7.ru.json': ScaleFileSchema,
   'rules/routing.json': RuleFileSchema,
+  'rules/adherence.json': RuleFileSchema,
   'emergency/patient.ru.json': EmergencyFileSchema,
+  'drugs/grls-psychotropics.json': DrugCatalogFileSchema,
 };
 
 let failed = false;

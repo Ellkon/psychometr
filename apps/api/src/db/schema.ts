@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  date,
   boolean,
   check,
   customType,
@@ -176,18 +177,23 @@ export const consents = pgTable(
   },
   (table) => [uniqueIndex('consents_patient_version_idx').on(table.patientId, table.version)],
 );
-export const auditEvents = pgTable('audit_events', {
-  sequence: bigint('sequence', { mode: 'number' }).primaryKey(),
-  occurredAt: time('occurred_at').notNull(),
-  actorId: uuid('actor_id'),
-  // Intentionally no FK: denied access to a nonexistent UUID must be auditable.
-  resourceId: uuid('resource_id'),
-  action: text('action').notNull(),
-  // Optional, hashed only when present, so rows written before this column keep their hash.
-  detail: text('detail'),
-  previousHash: text('previous_hash').notNull(),
-  hash: text('hash').notNull(),
-});
+export const auditEvents = pgTable(
+  'audit_events',
+  {
+    sequence: bigint('sequence', { mode: 'number' }).primaryKey(),
+    occurredAt: time('occurred_at').notNull(),
+    actorId: uuid('actor_id'),
+    // Intentionally no FK: denied access to a nonexistent UUID must be auditable.
+    resourceId: uuid('resource_id'),
+    action: text('action').notNull(),
+    // Optional, hashed only when present, so rows written before this column keep their hash.
+    detail: text('detail'),
+    previousHash: text('previous_hash').notNull(),
+    hash: text('hash').notNull(),
+  },
+  // Registry looks up when a doctor last opened a patient (FR-7.1).
+  (table) => [index('audit_events_resource_actor_idx').on(table.resourceId, table.actorId)],
+);
 
 /** Врач задаёт расписание шкалы пациенту (FR-3.4). Одна строка на пару пациент–шкала. */
 export const scaleSchedules = pgTable(
@@ -321,5 +327,96 @@ export const tasks = pgTable(
       'tasks_comment_length',
       sql`${table.comment} is null or length(${table.comment}) <= 1000`,
     ),
+  ],
+);
+
+/**
+ * Назначение, которое внёс врач (FR-6, FR-7.2). Система не назначает лечение: она фиксирует
+ * то, что врач уже назначил. Препарат выбирается из снимка ГРЛС или вводится текстом.
+ * Изменение схемы приёма = остановка и новое назначение; меняется только статус.
+ */
+export const medicationRequests = pgTable(
+  'medication_requests',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    patientId: uuid('patient_id')
+      .notNull()
+      .references(() => patients.id, { onDelete: 'restrict' }),
+    /** ГРЛС registration number when chosen from the snapshot; null for free text. */
+    grlsRegNumber: text('grls_reg_number'),
+    drugText: text('drug_text').notNull(),
+    doseText: text('dose_text').notNull(),
+    /** Local intake times "HH:MM", sorted and unique. */
+    doseTimes: jsonb('dose_times').$type<string[]>().notNull(),
+    timeZone: text('time_zone').notNull(),
+    startsOn: date('starts_on', { mode: 'string' }).notNull(),
+    endsOn: date('ends_on', { mode: 'string' }),
+    status: text('status').$type<'active' | 'stopped'>().notNull(),
+    createdAt: time('created_at').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    stoppedAt: time('stopped_at'),
+    stoppedBy: uuid('stopped_by').references(() => users.id, { onDelete: 'restrict' }),
+  },
+  (table) => [
+    index('medication_requests_patient_idx').on(table.patientId, table.status),
+    check('medication_requests_status', sql`${table.status} in ('active', 'stopped')`),
+    check(
+      'medication_requests_stop_consistent',
+      sql`(${table.status} = 'active' and ${table.stoppedAt} is null) or (${table.status} = 'stopped' and ${table.stoppedAt} is not null)`,
+    ),
+    check(
+      'medication_requests_period',
+      sql`${table.endsOn} is null or ${table.endsOn} >= ${table.startsOn}`,
+    ),
+  ],
+);
+
+/** Отметка приёма или пропуска дозы пациентом (FR-6). Append-only, одна отметка на слот. */
+export const doseLog = pgTable(
+  'dose_log',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    patientId: uuid('patient_id')
+      .notNull()
+      .references(() => patients.id, { onDelete: 'restrict' }),
+    medicationRequestId: uuid('medication_request_id')
+      .notNull()
+      .references(() => medicationRequests.id, { onDelete: 'restrict' }),
+    scheduledFor: time('scheduled_for').notNull(),
+    status: text('status').$type<'taken' | 'skipped'>().notNull(),
+    recordedAt: time('recorded_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('dose_log_slot_idx').on(table.medicationRequestId, table.scheduledFor),
+    index('dose_log_patient_idx').on(table.patientId, table.scheduledFor),
+    check('dose_log_status', sql`${table.status} in ('taken', 'skipped')`),
+  ],
+);
+
+/** Нежелательное явление со слов пациента (FR-6). Append-only. */
+export const adverseEvents = pgTable(
+  'adverse_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    patientId: uuid('patient_id')
+      .notNull()
+      .references(() => patients.id, { onDelete: 'restrict' }),
+    /** Client-generated per form fill; makes a retried send idempotent. */
+    submissionId: uuid('submission_id').notNull(),
+    medicationRequestId: uuid('medication_request_id').references(() => medicationRequests.id, {
+      onDelete: 'restrict',
+    }),
+    description: text('description').notNull(),
+    severity: text('severity').$type<'mild' | 'moderate' | 'severe'>().notNull(),
+    startedOn: date('started_on', { mode: 'string' }).notNull(),
+    recordedAt: time('recorded_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('adverse_events_submission_idx').on(table.patientId, table.submissionId),
+    index('adverse_events_patient_idx').on(table.patientId, table.recordedAt),
+    check('adverse_events_severity', sql`${table.severity} in ('mild', 'moderate', 'severe')`),
+    check('adverse_events_description_length', sql`length(${table.description}) <= 1000`),
   ],
 );
