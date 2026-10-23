@@ -7,6 +7,7 @@ import {
   type ConsentDocument,
 } from '@psychometr/shared';
 import { buildApp } from '../app.js';
+import type { RuleEngine } from '../domain/rules.js';
 import { connectDatabase } from '../db/client.js';
 import { practitioners, users } from '../db/schema.js';
 import { hashCredential, newInviteCode, newOpaqueToken } from '../security/credentials.js';
@@ -26,7 +27,7 @@ export const TEST_IDENTITY = {
   snils: null,
 };
 
-export async function fixture(withConsent = true) {
+export async function fixture(withConsent = true, rules?: RuleEngine) {
   const connection = connectDatabase(inject('databaseUrl'));
   const env = testEnv(inject('databaseUrl'));
   let clock = new Date();
@@ -36,6 +37,7 @@ export async function fixture(withConsent = true) {
     silent: true,
     consent: withConsent ? TEST_CONSENT : undefined,
     clock: () => clock,
+    rules,
   });
   let closed = false;
   const close = async () => {
@@ -46,7 +48,7 @@ export async function fixture(withConsent = true) {
   };
   onTestFinished(close);
   const request = (
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     url: string,
     accessToken?: string,
     body?: unknown,

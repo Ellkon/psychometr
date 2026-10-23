@@ -58,7 +58,7 @@ declare module 'fastify' {
     principal: Principal | null;
   }
 }
-function principal(request: FastifyRequest): Principal {
+export function principal(request: FastifyRequest): Principal {
   if (!request.principal) throw unauthorized();
   return request.principal;
 }
@@ -77,6 +77,18 @@ function sendLogin(reply: FastifyReply, login: LoginResult) {
   return login.response;
 }
 
+/** Bearer authentication for every protected route; denials are counted by AuthService. */
+export function protectRoute(auth: AuthService) {
+  return async (request: FastifyRequest): Promise<void> => {
+    const header = AuthorizationHeaderSchema.safeParse(request.headers);
+    if (!header.success) {
+      await auth.deny();
+      throw unauthorized();
+    }
+    request.principal = await auth.authenticate(header.data.authorization.slice(7));
+  };
+}
+
 export function registerAccessRoutes(
   app: FastifyInstance,
   auth: AuthService,
@@ -85,14 +97,7 @@ export function registerAccessRoutes(
 ): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
   app.decorateRequest('principal', null);
-  const protectedRoute = async (request: FastifyRequest): Promise<void> => {
-    const header = AuthorizationHeaderSchema.safeParse(request.headers);
-    if (!header.success) {
-      await auth.deny();
-      throw unauthorized();
-    }
-    request.principal = await auth.authenticate(header.data.authorization.slice(7));
-  };
+  const protectedRoute = protectRoute(auth);
   app.addHook('onRequest', async (request, reply) => {
     reply.header('Cache-Control', 'no-store');
     reply.header('Pragma', 'no-cache');

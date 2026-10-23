@@ -148,10 +148,18 @@ export const AuditActionSchema = z.enum([
   'consent.accepted',
   'sessions.revoked',
   'care_team.changed',
+  'scale.answered',
+  'scale.history_viewed',
+  'scale.schedule_changed',
+  'rule.triggered',
+  'cards.viewed',
+  'task.decided',
   'access.denied',
   'audit.viewed',
 ]);
 export type AuditAction = z.infer<typeof AuditActionSchema>;
+/** Optional identifier attached to an audit row: a scale id or a rule id. */
+export const AuditDetailSchema = z.string().regex(/^[a-z][a-z0-9_]{1,63}$/);
 export const AuditEventSchema = z.object({
   sequence: z.number().int().positive(),
   occurredAt: z.iso.datetime(),

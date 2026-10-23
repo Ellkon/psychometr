@@ -10,6 +10,7 @@ import { InvitePage } from './pages/InvitePage.js';
 import { PatientPage } from './pages/PatientPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { AuditPage } from './pages/AuditPage.js';
+import { ScaleFormPage } from './pages/ScaleFormPage.js';
 import { queryClient, SessionProvider } from './lib/session.js';
 import './styles.css';
 import { z } from 'zod';
@@ -43,6 +44,11 @@ const patientRoute = createRoute({
   path: '/patients/$patientId',
   component: PatientPage,
 });
+const scaleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/patients/$patientId/scales/$scaleId',
+  component: ScaleFormPage,
+});
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin',
@@ -60,6 +66,7 @@ const router = createRouter({
     patientLoginRoute,
     inviteRoute,
     patientRoute,
+    scaleRoute,
     adminRoute,
     auditRoute,
   ]),

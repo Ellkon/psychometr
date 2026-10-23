@@ -64,7 +64,7 @@ test('doctor invitation, patient consent, PIN return and immediate revocation', 
     await patient.getByLabel('Повторите личный код').fill(personalCode);
     await patient.getByRole('checkbox').check();
     await patient.getByRole('button', { name: 'Принять приглашение' }).click();
-    await expect(patient.getByRole('heading', { name: 'Вы вошли по приглашению' })).toBeVisible();
+    await expect(patient.getByRole('heading', { name: 'Добро пожаловать' })).toBeVisible();
     expect(referrers.some((referrer) => referrer.includes(token))).toBe(false);
     const cookies = await patientContext.cookies();
     for (const name of ['__Host-compass-refresh', '__Host-compass-device']) {
@@ -107,7 +107,7 @@ test('doctor invitation, patient consent, PIN return and immediate revocation', 
     await patient.getByRole('link', { name: 'Я уже входил(а) на этом устройстве' }).click();
     await patient.getByLabel('Личный шестизначный код').fill(personalCode);
     await patient.getByRole('button', { name: 'Войти', exact: true }).click();
-    await expect(patient.getByRole('heading', { name: 'Вы вошли по приглашению' })).toBeVisible();
+    await expect(patient.getByRole('heading', { name: 'Добро пожаловать' })).toBeVisible();
     await page.getByLabel('Подтверждаю отзыв всех сессий пациента').check();
     await page.getByRole('button', { name: 'Отозвать все сессии' }).click();
     await expect(page.getByRole('status')).toContainText('отозваны');

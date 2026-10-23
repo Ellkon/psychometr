@@ -11,6 +11,8 @@ RUN pnpm install --frozen-lockfile
 
 COPY packages/shared packages/shared
 COPY apps/web apps/web
+# Emergency instruction text is bundled from content/ (offline, FR-5.4).
+COPY content content
 RUN pnpm --filter @psychometr/shared build && pnpm --filter @psychometr/web build
 
 # The official 2.11.7 binary embeds vulnerable Go 1.26.8 and x/net 0.59.0.

@@ -17,4 +17,10 @@ export {
 
 export * from './access.js';
 
+export * from './scales.js';
+
+export * from './rules.js';
+
+export * from './emergency.js';
+
 export type { ZodType as ResponseSchema } from 'zod';

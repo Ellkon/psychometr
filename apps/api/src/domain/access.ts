@@ -52,7 +52,7 @@ export async function authorized<T>(
   });
   return unwrap(outcome);
 }
-export function assertRole(user: Principal, role: 'doctor' | 'admin'): void {
+export function assertRole(user: Principal, role: 'doctor' | 'admin' | 'patient'): void {
   if (user.role !== role) throw new AccessDenied();
 }
 

@@ -22,6 +22,20 @@
       "when": 1792686809852,
       "tag": "0002_least_privilege",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792773566032,
+      "tag": "0003_clinical_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792773567268,
+      "tag": "0004_clinical_permissions",
+      "breakpoints": true
     }
   ]
 }

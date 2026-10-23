@@ -13,6 +13,8 @@ import { sessionClient, useSession } from '../lib/session.js';
 import { Card, CardContent, CardHeader } from '../components/ui/card.js';
 import { AsyncForm, Button, ErrorNotice, Field } from '../components/forms.js';
 import { IdentityForm } from '../components/identity-form.js';
+import { ScalesPanel } from '../components/scales-panel.js';
+import { ClinicalCardsPanel } from '../components/clinical-cards-panel.js';
 
 const inviteStatus = (status: string) => {
   switch (status) {
@@ -99,6 +101,8 @@ export function PatientPage() {
           )}
         </CardContent>
       </Card>
+      {(user.role === 'doctor' || user.role === 'patient') && <ScalesPanel patientId={id} />}
+      {user.role === 'doctor' && <ClinicalCardsPanel patientId={id} />}
       {user.role === 'doctor' && <Invitations key={id} patientId={id} />}
     </div>
   );

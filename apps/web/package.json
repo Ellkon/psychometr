@@ -17,7 +17,8 @@
     "@tanstack/react-router": "1.170.44",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "recharts": "3.10.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

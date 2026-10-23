@@ -40,7 +40,7 @@ export function HomePage() {
           <p className="text-xs font-semibold uppercase tracking-wider text-teal-700">
             Личный кабинет
           </p>
-          <h1 className="text-2xl font-semibold">Вы вошли по приглашению</h1>
+          <h1 className="text-2xl font-semibold">Добро пожаловать</h1>
           <p className="text-slate-600">
             Устройство привязано. При следующем входе на нём понадобится ваш личный код.
           </p>
@@ -54,8 +54,7 @@ export function HomePage() {
             Мои данные
           </Link>
           <p className="mt-5 text-sm text-slate-500">
-            Заполнение шкал и история результатов появятся на следующем этапе. Сейчас они
-            недоступны.
+            Назначенные врачом шкалы и история ваших результатов — в карточке «Мои данные».
           </p>
         </CardContent>
       </Card>

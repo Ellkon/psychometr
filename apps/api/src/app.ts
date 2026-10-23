@@ -14,6 +14,16 @@ import { registerAccessRoutes } from './routes/access.js';
 import { connectDatabase, type Database } from './db/client.js';
 import { AuthService } from './domain/auth.js';
 import { PatientService } from './domain/patients.js';
+import {
+  ScaleService,
+  findContentDir,
+  loadScaleCatalog,
+  type ScaleCatalog,
+} from './domain/scales.js';
+import { ClinicalCardService } from './domain/cards.js';
+import { loadRuleEngine, type RuleEngine } from './domain/rules.js';
+import { registerCardRoutes } from './routes/cards.js';
+import { registerScaleRoutes } from './routes/scales.js';
 import { AccessTokens } from './security/access-token.js';
 import { IdentityVault } from './security/identity.js';
 
@@ -23,6 +33,8 @@ export interface BuildAppOptions {
   db?: Database;
   consent?: ConsentDocument;
   clock?: () => Date;
+  scales?: ScaleCatalog;
+  rules?: RuleEngine;
 }
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const env = options.env ?? loadEnv();
@@ -59,6 +71,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     new PatientService(db, vault, env.PUBLIC_ORIGIN, options.clock),
     env.PUBLIC_ORIGIN,
   );
+  const scaleCatalog = options.scales ?? (await loadScaleCatalog());
+  const ruleEngine = options.rules ?? (await loadRuleEngine(findContentDir()));
+  const cards = new ClinicalCardService(db, ruleEngine, options.clock);
+  registerScaleRoutes(app, auth, new ScaleService(db, scaleCatalog, options.clock, cards));
+  registerCardRoutes(app, auth, cards);
   registerHealthRoutes(app, async () => {
     await db.execute(sql`select 1 from users limit 1`);
   });
