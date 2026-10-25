@@ -59,7 +59,7 @@ describe('therapy helpers', () => {
       drugOptions({
         exportDate: '2026-10-23',
         products: [
-          { regNumber: 'ЛП-1', tradeName: 'Золофт®', inn: 'Сертралин', dosageForms: ['таблетки'] },
+          { regNumber: 'ЛП-1', tradeName: 'Золофт®', inn: 'Сертралин', dosageForms: ['таблетки'], featured: false },
         ],
       })[0]?.label,
     ).toBe('Сертралин — Золофт® (ЛП-1)');

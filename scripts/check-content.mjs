@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   DrugCatalogFileSchema,
+  DrugFeaturedFileSchema,
   EmergencyFileSchema,
   RuleFileSchema,
   ScaleFileSchema,
@@ -31,6 +32,7 @@ const VALIDATORS = {
   'rules/safety.json': RuleFileSchema,
   'emergency/patient.ru.json': EmergencyFileSchema,
   'drugs/grls-psychotropics.json': DrugCatalogFileSchema,
+  'drugs/featured.json': DrugFeaturedFileSchema,
 };
 
 let failed = false;
@@ -104,6 +106,25 @@ try {
 } catch (error) {
   failed = true;
   console.error('FAIL: rule references: %s', error instanceof Error ? error.message : error);
+}
+
+// Featured products must exist in the ГРЛС snapshot.
+try {
+  const known = new Set(
+    JSON.parse(
+      await readFile(path.join(contentDir, 'drugs', 'grls-psychotropics.json'), 'utf8'),
+    ).products.map((product) => product.reg_number),
+  );
+  const featured = JSON.parse(await readFile(path.join(contentDir, 'drugs', 'featured.json'), 'utf8'));
+  for (const regNumber of featured.reg_numbers) {
+    if (!known.has(regNumber)) {
+      failed = true;
+      console.error('FAIL: content/drugs/featured.json: %s is not in the snapshot', regNumber);
+    }
+  }
+} catch (error) {
+  failed = true;
+  console.error('FAIL: featured drugs: %s', error instanceof Error ? error.message : error);
 }
 
 // Emergency lines may wait for a confirmed source, but never cite an unknown one.

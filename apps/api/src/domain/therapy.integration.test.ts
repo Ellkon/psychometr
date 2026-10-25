@@ -157,7 +157,11 @@ describe('IDOR matrix for therapy routes', () => {
   it('drug catalog and registry are for doctors only', async () => {
     const catalog = await f.request('GET', '/api/drugs', f.doctor.accessToken);
     expect(catalog.statusCode).toBe(200);
-    expect(DrugCatalogSchema.parse(catalog.json<unknown>()).products.length).toBeGreaterThan(0);
+    const products = DrugCatalogSchema.parse(catalog.json<unknown>()).products;
+    expect(products.length).toBeGreaterThan(0);
+    // content/drugs/featured.json: АВИАНДР® is listed first.
+    expect(products[0]).toMatchObject({ tradeName: 'АВИАНДР®', featured: true });
+    expect(products.filter((product) => product.featured)).toHaveLength(1);
     for (const token of [f.admin.accessToken, (await f.enroll()).accessToken]) {
       expect((await f.request('GET', '/api/drugs', token)).statusCode).toBe(403);
       expect((await f.request('GET', '/api/registry', token)).statusCode).toBe(403);

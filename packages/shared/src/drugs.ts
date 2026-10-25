@@ -25,12 +25,26 @@ export const DrugCatalogFileSchema = z
   .strict();
 export type DrugCatalogFile = z.infer<typeof DrugCatalogFileSchema>;
 
+/**
+ * Products the prescription form lists first (content/drugs/featured.json). Display order only,
+ * not a recommendation: the doctor chooses the drug and the dose.
+ */
+export const DrugFeaturedFileSchema = z
+  .object({
+    note: z.string().min(1),
+    reg_numbers: z.array(z.string().min(1).max(100)).max(20),
+  })
+  .strict();
+export type DrugFeaturedFile = z.infer<typeof DrugFeaturedFileSchema>;
+
 /** Doctor-facing catalog entry: what the prescription form offers for selection. */
 export const DrugOptionSchema = z.object({
   regNumber: z.string(),
   tradeName: z.string(),
   inn: z.string(),
   dosageForms: z.array(z.string()),
+  /** Listed first in the prescription form (featured.json). */
+  featured: z.boolean(),
 });
 export const DrugCatalogSchema = z.object({
   exportDate: z.iso.date(),
