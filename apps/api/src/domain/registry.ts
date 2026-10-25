@@ -2,11 +2,12 @@
  * Doctor's registry (FR-7.1) and patient timeline (FR-7.2). Registry rows hold facts only:
  * scores, contact gaps, due scales, missed doses. The doctor decides what they mean.
  */
-import { and, asc, desc, eq, gt, inArray, max, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, max, sql } from 'drizzle-orm';
 import type { Principal, Registry, RegistryRow, Timeline, TimelineEvent } from '@psychometr/shared';
 import type { Database, Transaction } from '../db/client.js';
 import {
   adverseEvents,
+  alerts,
   auditEvents,
   careTeam,
   doseLog,
@@ -178,6 +179,17 @@ export class RegistryService {
           : eq(adverseEvents.patientId, patientId),
       );
 
+    const [openAlerts] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(alerts)
+      .where(
+        and(
+          eq(alerts.patientId, patientId),
+          eq(alerts.recipientId, user.id),
+          isNull(alerts.acknowledgedAt),
+        ),
+      );
+
     return {
       patientId,
       createdAt: (patient?.createdAt ?? now).toISOString(),
@@ -191,6 +203,7 @@ export class RegistryService {
       activeMedications: active.length,
       missedDosesInRow,
       adverseEventsSinceReview: adverseSince?.count ?? 0,
+      openAlerts: openAlerts?.count ?? 0,
       reviewed: lastActivity === null || (reviewedAt !== null && reviewedAt >= lastActivity),
     };
   }
@@ -277,6 +290,22 @@ export class RegistryService {
             ruleId: row.ruleId,
             severity: row.severity as 'info' | 'warning' | 'critical',
             message: row.message,
+          });
+        // All alerts of the patient, including those sent to another doctor of the care team.
+        for (const row of await tx
+          .select()
+          .from(alerts)
+          .where(eq(alerts.patientId, patientId))
+          .orderBy(desc(alerts.createdAt))
+          .limit(TIMELINE_LIMIT))
+          events.push({
+            at: row.createdAt.toISOString(),
+            kind: 'alert',
+            ruleId: row.ruleId,
+            message: row.message,
+            status: row.status,
+            acknowledgedAt: row.acknowledgedAt?.toISOString() ?? null,
+            escalation: row.escalationOf !== null,
           });
         await appendAudit(
           tx,

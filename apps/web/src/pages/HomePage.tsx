@@ -275,6 +275,11 @@ function RegistryTable({ rows }: { rows: readonly RegistryRow[] }) {
                     : 'Отмечаются'}
               </td>
               <td className="grid gap-1 py-3 pr-3">
+                {row.openAlerts > 0 && (
+                  <span className="font-medium text-red-800">
+                    Неподтверждённые алерты: {row.openAlerts}
+                  </span>
+                )}
                 {row.safetySignal && <span className="text-red-800">Пункт 9 больше 0</span>}
                 {row.adverseEventsSinceReview > 0 && (
                   <span className="text-amber-800">Новые НЯ: {row.adverseEventsSinceReview}</span>

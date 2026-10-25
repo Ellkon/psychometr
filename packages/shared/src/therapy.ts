@@ -146,6 +146,8 @@ export const RegistryRowSchema = z.object({
   activeMedications: z.number().int().min(0),
   missedDosesInRow: z.number().int().min(0),
   adverseEventsSinceReview: z.number().int().min(0),
+  /** Critical alerts to this doctor that are not acknowledged yet (FR-8). */
+  openAlerts: z.number().int().min(0),
   /** The doctor opened the patient after the latest patient activity. */
   reviewed: z.boolean(),
 });
@@ -189,6 +191,16 @@ export const TimelineEventSchema = z.discriminatedUnion('kind', [
     ruleId: z.string(),
     severity: z.enum(['info', 'warning', 'critical']),
     message: z.string(),
+  }),
+  z.object({
+    ...TimelineBase,
+    kind: z.literal('alert'),
+    ruleId: z.string(),
+    message: z.string(),
+    status: z.enum(['pending', 'sent', 'delivered', 'acknowledged']),
+    acknowledgedAt: z.iso.datetime().nullable(),
+    /** True for the copy sent to a reserve doctor (FR-8.3). */
+    escalation: z.boolean(),
   }),
 ]);
 export type TimelineEvent = z.infer<typeof TimelineEventSchema>;

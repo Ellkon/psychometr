@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { and, count, eq } from 'drizzle-orm';
 import WebSocket, { type RawData } from 'ws';
-import { AlertListSchema, type Alert } from '@psychometr/shared';
+import { AlertListSchema, RegistrySchema, TimelineSchema, type Alert } from '@psychometr/shared';
 import { fixture, type Fixture } from '../testing/fixture.js';
 import { alerts, auditEvents, careTeam, sessions } from '../db/schema.js';
 import { REFRESH_COOKIE } from '../routes/access.js';
@@ -551,5 +551,35 @@ describe('parallel requests and retries', () => {
     const rows = await alertRows();
     expect(rows.filter((row) => row.escalationOf !== null)).toHaveLength(1);
     expect(await auditCount('alert.escalated')).toBe(1);
+  });
+});
+
+describe('registry and timeline show alerts (FR-7.1, FR-7.2)', () => {
+  it('an open alert is counted in the registry and listed in the timeline until acknowledged', async () => {
+    await submitItem9(1);
+    const registry = await f.request('GET', '/api/registry', f.doctor.accessToken);
+    expect(registry.statusCode).toBe(200);
+    const row = RegistrySchema.parse(registry.json<unknown>()).patients.find(
+      (item) => item.patientId === f.patientId,
+    );
+    expect(row?.openAlerts).toBe(1);
+
+    const [alert] = await listAs(f.doctor.accessToken);
+    await f.request('POST', `/api/alerts/${idOf(alert)}/ack`, f.doctor.accessToken, {});
+    const after = RegistrySchema.parse(
+      (await f.request('GET', '/api/registry', f.doctor.accessToken)).json<unknown>(),
+    ).patients.find((item) => item.patientId === f.patientId);
+    expect(after?.openAlerts).toBe(0);
+
+    const timeline = TimelineSchema.parse(
+      (
+        await f.request('GET', `/api/patients/${f.patientId}/timeline`, f.doctor.accessToken)
+      ).json<unknown>(),
+    );
+    expect(timeline.events.find((event) => event.kind === 'alert')).toMatchObject({
+      ruleId: 'phq9_item9_positive',
+      status: 'acknowledged',
+      escalation: false,
+    });
   });
 });

@@ -7,6 +7,12 @@ import { Card, CardContent, CardHeader } from './ui/card.js';
 
 const dateTimeFormat = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 const scaleTitle: Record<string, string> = { phq9: 'PHQ-9', gad7: 'GAD-7' };
+const alertStatusLabel = {
+  pending: 'ожидает отправки',
+  sent: 'отправлен',
+  delivered: 'доставлен',
+  acknowledged: 'подтверждён',
+} as const;
 
 function describe(event: TimelineEvent): { title: string; detail: string; accent: boolean } {
   switch (event.kind) {
@@ -42,6 +48,12 @@ function describe(event: TimelineEvent): { title: string; detail: string; accent
         detail: event.message,
         accent: event.severity === 'critical',
       };
+    case 'alert':
+      return {
+        title: `${event.escalation ? 'Алерт резервному врачу' : 'Алерт врачу'}: ${alertStatusLabel[event.status]}`,
+        detail: `${event.message}${event.acknowledgedAt ? ` · подтверждён ${dateTimeFormat.format(new Date(event.acknowledgedAt))}` : ''}`,
+        accent: event.status !== 'acknowledged',
+      };
   }
 }
 
@@ -59,8 +71,8 @@ export function TimelinePanel({ patientId }: { patientId: string }) {
       <CardHeader>
         <h2 className="text-xl font-semibold">Таймлайн</h2>
         <p className="text-sm text-slate-600">
-          Баллы шкал, назначения, отметки доз, нежелательные явления и срабатывания правил — от
-          новых к старым.
+          Баллы шкал, назначения, отметки доз, нежелательные явления, срабатывания правил и
+          алерты — от новых к старым.
         </p>
       </CardHeader>
       <CardContent>
