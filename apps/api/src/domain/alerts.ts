@@ -376,6 +376,11 @@ export class AlertService {
     return { dispatched, escalated };
   }
 
+  /** Logout or revocation: re-check sockets at the next tick instead of within 30 s. */
+  requestSweep(): void {
+    this.lastSweep = Number.NEGATIVE_INFINITY;
+  }
+
   /**
    * Re-checks every open socket against its session. A revoked, expired, idle or deactivated
    * session closes the socket with 4401. Errors count as "not live": fail closed.

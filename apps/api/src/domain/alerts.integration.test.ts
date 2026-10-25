@@ -449,7 +449,7 @@ describe('WebSocket delivery (FR-8.1)', () => {
         { [REFRESH_COOKIE]: f.doctor.refresh },
       );
       expect(logout.statusCode).toBe(200);
-      f.advance(31_000);
+      // Logout asks for an immediate re-check: no 30-second window with live alerts (audit F9).
       expect(await f.app.alerts.sweepSockets()).toBe(1);
       expect(await closing).toBe(4401);
     } finally {
@@ -683,5 +683,42 @@ describe('dispatcher robustness (audit F2, F3)', () => {
     ).resolves.toBe(false);
     expect(sent).toEqual([]);
     expect((await alertRows())[0]?.status).toBe('acknowledged');
+  });
+});
+
+describe('removing a doctor reroutes open alerts at once (audit F5)', () => {
+  it('the open alert of a removed doctor goes to the remaining doctor at the next tick', async () => {
+    await f.db.insert(careTeam).values({
+      patientId: f.patientId,
+      practitionerId: f.otherDoctor.user.id,
+    });
+    await submitItem9(1);
+    const removed = await f.request(
+      'DELETE',
+      `/api/admin/care-team/${f.patientId}/${f.doctor.user.id}`,
+      f.admin.accessToken,
+    );
+    expect(removed.statusCode).toBe(200);
+    expect(await service().escalate(new Date())).toBe(1);
+    const reserve = await listAs(f.otherDoctor.accessToken);
+    expect(reserve).toHaveLength(1);
+    expect(reserve[0]?.escalatedFrom).not.toBeNull();
+  });
+});
+
+describe('receipt confirmations are bound to the recipient (audit F10)', () => {
+  it("another doctor cannot mark someone else's alert as delivered", async () => {
+    await submitItem9(1);
+    const hub = new AlertHub();
+    hub.register(f.doctor.user.id, { send: () => undefined, close: () => undefined }, () =>
+      Promise.resolve(true),
+    );
+    await service(hub).dispatch(new Date());
+    const [row] = await alertRows();
+    expect(row?.status).toBe('sent');
+    await f.app.alerts.markReceived(f.otherDoctor.user.id, idOf(row));
+    expect((await alertRows())[0]?.status).toBe('sent');
+    await f.app.alerts.markReceived(f.doctor.user.id, idOf(row));
+    expect((await alertRows())[0]?.status).toBe('delivered');
   });
 });

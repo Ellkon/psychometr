@@ -3,6 +3,7 @@ import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { AuditActionSchema, type PatientIdentity, type Principal } from '@psychometr/shared';
 import type { Database } from '../db/client.js';
 import {
+  alerts,
   auditEvents,
   careTeam,
   patientDevices,
@@ -303,6 +304,19 @@ export class PatientService {
             .delete(careTeam)
             .where(
               and(eq(careTeam.patientId, patientId), eq(careTeam.practitionerId, practitionerId)),
+            );
+          // Open alerts of the removed doctor go to the rest of the care team at the next worker
+          // tick instead of waiting out the escalation timer (FR-8.3).
+          await tx
+            .update(alerts)
+            .set({ escalateAt: this.now() })
+            .where(
+              and(
+                eq(alerts.patientId, patientId),
+                eq(alerts.recipientId, practitionerId),
+                isNull(alerts.acknowledgedAt),
+                isNull(alerts.escalatedAt),
+              ),
             );
           await tx
             .update(patientInvites)

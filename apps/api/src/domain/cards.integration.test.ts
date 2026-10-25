@@ -219,13 +219,15 @@ describe('IDOR and roles for cards', () => {
     },
   );
 
-  it.each(['patient', 'other doctor', 'admin'] as const)(
+  it.each(['patient', 'other patient', 'other doctor', 'admin'] as const)(
     'decision: %s cannot decide the task',
     async (role) => {
       const taskId = await openTaskId();
       let token: string;
       if (role === 'patient') token = ownPatient;
       else if (role === 'admin') token = f.admin.accessToken;
+      else if (role === 'other patient')
+        token = (await f.enroll(f.otherPatientId, f.otherDoctor.accessToken)).accessToken;
       else token = f.otherDoctor.accessToken;
       const response = await f.request('POST', decisionPath(f.patientId, taskId), token, {
         decision: 'accepted',

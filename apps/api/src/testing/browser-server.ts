@@ -94,7 +94,7 @@ const server = createServer({ key, cert }, (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' wss://localhost:*; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
     );
     response.setHeader('Cache-Control', 'no-store');
     const url = request.url ?? '/';

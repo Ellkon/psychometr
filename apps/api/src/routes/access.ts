@@ -192,6 +192,8 @@ export function registerAccessRoutes(
     { schema: { body: EmptyBodySchema, response: { 200: SuccessSchema, ...errors } } },
     async (request, reply) => {
       await auth.logout(cookieValue(request, REFRESH_COOKIE));
+      // Open alert sockets of the ended session close at the next worker tick (S-2).
+      app.alerts.requestSweep();
       reply.clearCookie(REFRESH_COOKIE, cookieOptions);
       // The binding alone cannot authenticate; it still requires the personal code.
       return { ok: true as const };

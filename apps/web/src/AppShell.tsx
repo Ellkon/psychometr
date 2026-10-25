@@ -3,6 +3,23 @@ import { Button, ErrorNotice } from './components/forms.js';
 import { useSession } from './lib/session.js';
 import { AlertsCenter } from './components/alerts-center.js';
 import { SecuritySignals } from './components/security-signals.js';
+import { indexedOutbox } from './lib/outbox.js';
+
+/** Logout removes the unsent queue (FR-9): ask first when it still holds marks. */
+async function confirmLogout(): Promise<boolean> {
+  let pending: number;
+  try {
+    pending = (await indexedOutbox.list()).length;
+  } catch {
+    return true;
+  }
+  return (
+    pending === 0 ||
+    window.confirm(
+      `Не отправлено отметок: ${String(pending)}. После выхода они удалятся с этого устройства. Выйти?`,
+    )
+  );
+}
 
 export function AppShell() {
   const { user, logout, privacyError } = useSession(),
@@ -51,7 +68,9 @@ export function AppShell() {
                 </span>
                 <Button
                   onClick={() => {
-                    void logout().then(() => navigate({ to: '/' }));
+                    void confirmLogout().then((confirmed) => {
+                      if (confirmed) void logout().then(() => navigate({ to: '/' }));
+                    });
                   }}
                 >
                   Выйти
