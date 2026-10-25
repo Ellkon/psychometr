@@ -81,7 +81,7 @@ pnpm dev              # API + Vite; нужны .env и доступная лок
 pnpm build
 pnpm lint
 pnpm typecheck
-pnpm test             # 279 проверок (API 233, web 28, shared 8, скрипты 10), в том числе на PostgreSQL 16
+pnpm test             # 298 проверок (API 251, web 29, shared 8, скрипты 10), в том числе на PostgreSQL 16
 pnpm format:check
 pnpm check:content
 pnpm audit --audit-level=high
@@ -90,6 +90,10 @@ pnpm db:migrate       # только MIGRATION_DATABASE_URL, отдельная 
 pnpm admin:create     # bootstrap без Docker; DATABASE_URL должен быть доступен локально
 pnpm test:e2e         # запущенный HTTPS-стенд + браузер Playwright + тестовый администратор
 ```
+
+Бэкап и восстановление — [`infra/backup/README.md`](infra/backup/README.md), нагрузочный тест k6 —
+[`infra/load/k6-clinical-compass.js`](infra/load/k6-clinical-compass.js), замеры —
+[`docs/development/stage-8.md`](docs/development/stage-8.md).
 
 В `.env`, созданном для Compose, адрес БД — `db` (внутри контейнеров).
 Для `pnpm dev` с БД вне Docker задайте свой `DATABASE_URL`/`MIGRATION_DATABASE_URL`.
