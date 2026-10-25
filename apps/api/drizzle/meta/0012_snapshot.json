@@ -107,12 +107,8 @@
           "name": "adverse_events_patient_id_patients_id_fk",
           "tableFrom": "adverse_events",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -120,12 +116,8 @@
           "name": "adverse_events_medication_request_id_medication_requests_id_fk",
           "tableFrom": "adverse_events",
           "tableTo": "medication_requests",
-          "columnsFrom": [
-            "medication_request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["medication_request_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -322,12 +314,8 @@
           "name": "alerts_patient_id_patients_id_fk",
           "tableFrom": "alerts",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -335,12 +323,8 @@
           "name": "alerts_recipient_id_practitioners_user_id_fk",
           "tableFrom": "alerts",
           "tableTo": "practitioners",
-          "columnsFrom": [
-            "recipient_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
+          "columnsFrom": ["recipient_id"],
+          "columnsTo": ["user_id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -348,12 +332,8 @@
           "name": "alerts_evaluation_id_rule_evaluations_id_fk",
           "tableFrom": "alerts",
           "tableTo": "rule_evaluations",
-          "columnsFrom": [
-            "evaluation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["evaluation_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -361,12 +341,8 @@
           "name": "alerts_adverse_event_id_adverse_events_id_fk",
           "tableFrom": "alerts",
           "tableTo": "adverse_events",
-          "columnsFrom": [
-            "adverse_event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["adverse_event_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -374,12 +350,8 @@
           "name": "alerts_escalation_of_alerts_id_fk",
           "tableFrom": "alerts",
           "tableTo": "alerts",
-          "columnsFrom": [
-            "escalation_of"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["escalation_of"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -387,12 +359,8 @@
           "name": "alerts_acknowledged_by_users_id_fk",
           "tableFrom": "alerts",
           "tableTo": "users",
-          "columnsFrom": [
-            "acknowledged_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["acknowledged_by"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -402,9 +370,7 @@
         "alerts_idempotency_key_unique": {
           "name": "alerts_idempotency_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "idempotency_key"
-          ]
+          "columns": ["idempotency_key"]
         }
       },
       "policies": {},
@@ -570,12 +536,8 @@
           "name": "care_team_patient_id_patients_id_fk",
           "tableFrom": "care_team",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -583,12 +545,8 @@
           "name": "care_team_practitioner_id_practitioners_user_id_fk",
           "tableFrom": "care_team",
           "tableTo": "practitioners",
-          "columnsFrom": [
-            "practitioner_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
+          "columnsFrom": ["practitioner_id"],
+          "columnsTo": ["user_id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -596,10 +554,7 @@
       "compositePrimaryKeys": {
         "care_team_patient_id_practitioner_id_pk": {
           "name": "care_team_patient_id_practitioner_id_pk",
-          "columns": [
-            "patient_id",
-            "practitioner_id"
-          ]
+          "columns": ["patient_id", "practitioner_id"]
         }
       },
       "uniqueConstraints": {},
@@ -689,12 +644,8 @@
           "name": "consents_patient_id_patients_id_fk",
           "tableFrom": "consents",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -796,12 +747,8 @@
           "name": "dose_log_patient_id_patients_id_fk",
           "tableFrom": "dose_log",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -809,12 +756,8 @@
           "name": "dose_log_medication_request_id_medication_requests_id_fk",
           "tableFrom": "dose_log",
           "tableTo": "medication_requests",
-          "columnsFrom": [
-            "medication_request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["medication_request_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -948,12 +891,8 @@
           "name": "medication_requests_patient_id_patients_id_fk",
           "tableFrom": "medication_requests",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -961,12 +900,8 @@
           "name": "medication_requests_created_by_users_id_fk",
           "tableFrom": "medication_requests",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -974,12 +909,8 @@
           "name": "medication_requests_stopped_by_users_id_fk",
           "tableFrom": "medication_requests",
           "tableTo": "users",
-          "columnsFrom": [
-            "stopped_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["stopped_by"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1098,12 +1029,8 @@
           "name": "observations_response_id_questionnaire_responses_id_fk",
           "tableFrom": "observations",
           "tableTo": "questionnaire_responses",
-          "columnsFrom": [
-            "response_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["response_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1111,12 +1038,8 @@
           "name": "observations_patient_id_patients_id_fk",
           "tableFrom": "observations",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1126,9 +1049,7 @@
         "observations_response_id_unique": {
           "name": "observations_response_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "response_id"
-          ]
+          "columns": ["response_id"]
         }
       },
       "policies": {},
@@ -1198,12 +1119,8 @@
           "name": "patient_devices_user_id_users_id_fk",
           "tableFrom": "patient_devices",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1213,9 +1130,7 @@
         "patient_devices_secret_hash_unique": {
           "name": "patient_devices_secret_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "secret_hash"
-          ]
+          "columns": ["secret_hash"]
         }
       },
       "policies": {},
@@ -1263,12 +1178,8 @@
           "name": "patient_identity_patient_id_patients_id_fk",
           "tableFrom": "patient_identity",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1402,12 +1313,8 @@
           "name": "patient_invites_patient_id_patients_id_fk",
           "tableFrom": "patient_invites",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1415,12 +1322,8 @@
           "name": "patient_invites_created_by_users_id_fk",
           "tableFrom": "patient_invites",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1428,12 +1331,8 @@
           "name": "patient_invites_user_id_users_id_fk",
           "tableFrom": "patient_invites",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1443,9 +1342,7 @@
         "patient_invites_token_hash_unique": {
           "name": "patient_invites_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "policies": {},
@@ -1488,12 +1385,8 @@
           "name": "patients_user_id_users_id_fk",
           "tableFrom": "patients",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1503,9 +1396,7 @@
         "patients_user_id_unique": {
           "name": "patients_user_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_id"
-          ]
+          "columns": ["user_id"]
         }
       },
       "policies": {},
@@ -1529,12 +1420,8 @@
           "name": "practitioners_user_id_users_id_fk",
           "tableFrom": "practitioners",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1654,12 +1541,8 @@
           "name": "questionnaire_responses_patient_id_patients_id_fk",
           "tableFrom": "questionnaire_responses",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1720,12 +1603,8 @@
           "name": "refresh_tokens_session_id_sessions_id_fk",
           "tableFrom": "refresh_tokens",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1836,12 +1715,8 @@
           "name": "rule_evaluations_patient_id_patients_id_fk",
           "tableFrom": "rule_evaluations",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1918,12 +1793,8 @@
           "name": "scale_schedules_patient_id_patients_id_fk",
           "tableFrom": "scale_schedules",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1931,12 +1802,8 @@
           "name": "scale_schedules_updated_by_users_id_fk",
           "tableFrom": "scale_schedules",
           "tableTo": "users",
-          "columnsFrom": [
-            "updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["updated_by"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1944,10 +1811,7 @@
       "compositePrimaryKeys": {
         "scale_schedules_patient_id_scale_id_pk": {
           "name": "scale_schedules_patient_id_scale_id_pk",
-          "columns": [
-            "patient_id",
-            "scale_id"
-          ]
+          "columns": ["patient_id", "scale_id"]
         }
       },
       "uniqueConstraints": {},
@@ -2040,12 +1904,8 @@
           "name": "security_signals_acknowledged_by_users_id_fk",
           "tableFrom": "security_signals",
           "tableTo": "users",
-          "columnsFrom": [
-            "acknowledged_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["acknowledged_by"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2147,12 +2007,8 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2160,12 +2016,8 @@
           "name": "sessions_device_id_patient_devices_id_fk",
           "tableFrom": "sessions",
           "tableTo": "patient_devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["device_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2258,12 +2110,8 @@
           "name": "tasks_patient_id_patients_id_fk",
           "tableFrom": "tasks",
           "tableTo": "patients",
-          "columnsFrom": [
-            "patient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["patient_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2271,12 +2119,8 @@
           "name": "tasks_evaluation_id_rule_evaluations_id_fk",
           "tableFrom": "tasks",
           "tableTo": "rule_evaluations",
-          "columnsFrom": [
-            "evaluation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["evaluation_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2284,12 +2128,8 @@
           "name": "tasks_decided_by_users_id_fk",
           "tableFrom": "tasks",
           "tableTo": "users",
-          "columnsFrom": [
-            "decided_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["decided_by"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2299,9 +2139,7 @@
         "tasks_evaluation_id_unique": {
           "name": "tasks_evaluation_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "evaluation_id"
-          ]
+          "columns": ["evaluation_id"]
         }
       },
       "policies": {},
@@ -2386,9 +2224,7 @@
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -2405,22 +2241,12 @@
     "public.invite_status": {
       "name": "invite_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "used",
-        "expired",
-        "blocked",
-        "revoked"
-      ]
+      "values": ["pending", "used", "expired", "blocked", "revoked"]
     },
     "public.user_role": {
       "name": "user_role",
       "schema": "public",
-      "values": [
-        "doctor",
-        "patient",
-        "admin"
-      ]
+      "values": ["doctor", "patient", "admin"]
     }
   },
   "schemas": {},

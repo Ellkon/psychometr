@@ -115,7 +115,9 @@ try {
       await readFile(path.join(contentDir, 'drugs', 'grls-psychotropics.json'), 'utf8'),
     ).products.map((product) => product.reg_number),
   );
-  const featured = JSON.parse(await readFile(path.join(contentDir, 'drugs', 'featured.json'), 'utf8'));
+  const featured = JSON.parse(
+    await readFile(path.join(contentDir, 'drugs', 'featured.json'), 'utf8'),
+  );
   for (const regNumber of featured.reg_numbers) {
     if (!known.has(regNumber)) {
       failed = true;
