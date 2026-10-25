@@ -1,5 +1,5 @@
 # API image: multi-stage, non-root runtime. Build context is the repo root.
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 RUN corepack enable
 WORKDIR /app
 
@@ -14,7 +14,7 @@ RUN pnpm --filter @psychometr/shared build && pnpm --filter @psychometr/api buil
 
 # pnpm prune is not recursive in a workspace. Install runtime dependencies in a
 # clean stage instead, preserving the workspace symlinks without dev packages.
-FROM node:22-alpine AS production-deps
+FROM node:25-alpine AS production-deps
 RUN corepack enable
 WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -22,7 +22,7 @@ COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 RUN pnpm install --prod --frozen-lockfile
 
-FROM node:22-alpine AS runtime
+FROM node:25-alpine AS runtime
 # The runtime invokes Node directly. Remove unused package managers and their
 # vulnerable transitive dependencies; application dependencies stay intact.
 RUN rm -rf /usr/local/lib/node_modules /opt/yarn-* \
