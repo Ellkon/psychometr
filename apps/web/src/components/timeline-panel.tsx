@@ -71,8 +71,8 @@ export function TimelinePanel({ patientId }: { patientId: string }) {
       <CardHeader>
         <h2 className="text-xl font-semibold">Таймлайн</h2>
         <p className="text-sm text-slate-600">
-          Баллы шкал, назначения, отметки доз, нежелательные явления, срабатывания правил и
-          алерты — от новых к старым.
+          Баллы шкал, назначения, отметки доз, нежелательные явления, срабатывания правил и алерты —
+          от новых к старым.
         </p>
       </CardHeader>
       <CardContent>

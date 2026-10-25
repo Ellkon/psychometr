@@ -195,7 +195,11 @@ export const auditEvents = pgTable(
     hash: text('hash').notNull(),
   },
   // Registry looks up when a doctor last opened a patient (FR-7.1).
-  (table) => [index('audit_events_resource_actor_idx').on(table.resourceId, table.actorId)],
+  (table) => [
+    index('audit_events_resource_actor_idx').on(table.resourceId, table.actorId),
+    // Runtime anomaly detection counts recent events of one kind (NFR-2).
+    index('audit_events_action_time_idx').on(table.action, table.occurredAt),
+  ],
 );
 
 /** Врач задаёт расписание шкалы пациенту (FR-3.4). Одна строка на пару пациент–шкала. */
@@ -470,5 +474,30 @@ export const alerts = pgTable(
       sql`${table.status} in ('pending', 'sent', 'delivered', 'acknowledged')`,
     ),
     check('alerts_severity_valid', sql`${table.severity} = 'critical'`),
+  ],
+);
+
+/**
+ * Сигнал безопасности администратору (NFR-2, рантайм): всплеск отказов в доступе или серия
+ * неверных паролей и кодов. Не содержит ПДн и клинических данных: только вид, окно и счётчик.
+ * Один сигнал на вид и пятиминутное окно. Меняется только подтверждение.
+ */
+export const securitySignals = pgTable(
+  'security_signals',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    kind: text('kind').$type<'access_denied_spike' | 'auth_failure_spike'>().notNull(),
+    windowStart: time('window_start').notNull(),
+    eventCount: integer('event_count').notNull(),
+    createdAt: time('created_at').notNull(),
+    acknowledgedAt: time('acknowledged_at'),
+    acknowledgedBy: uuid('acknowledged_by').references(() => users.id, { onDelete: 'restrict' }),
+  },
+  (table) => [
+    uniqueIndex('security_signals_window_idx').on(table.kind, table.windowStart),
+    check(
+      'security_signals_kind',
+      sql`${table.kind} in ('access_denied_spike', 'auth_failure_spike')`,
+    ),
   ],
 );

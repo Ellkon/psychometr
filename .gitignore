@@ -36,3 +36,4 @@ backups/
 # Site-specific approved consent text
 infra/consent/*.txt
 .pnpm-store/
+.claude/worktrees/

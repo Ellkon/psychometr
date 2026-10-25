@@ -2,6 +2,7 @@ import { Link, Outlet, useNavigate } from '@tanstack/react-router';
 import { Button, ErrorNotice } from './components/forms.js';
 import { useSession } from './lib/session.js';
 import { AlertsCenter } from './components/alerts-center.js';
+import { SecuritySignals } from './components/security-signals.js';
 
 export function AppShell() {
   const { user, logout, privacyError } = useSession(),
@@ -67,6 +68,7 @@ export function AppShell() {
       <main key={user?.id ?? 'anonymous'} className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
         <ErrorNotice message={privacyError} />
         {user?.role === 'doctor' && <AlertsCenter />}
+        {user?.role === 'admin' && <SecuritySignals />}
         <Outlet />
       </main>
       <footer className="border-t border-slate-200 bg-white">

@@ -164,6 +164,8 @@ export const AuditActionSchema = z.enum([
   'alert.escalated',
   'alert.escalation_unavailable',
   'alerts.viewed',
+  'security.signal_raised',
+  'security.signal_acknowledged',
   'registry.viewed',
   'timeline.viewed',
   'access.denied',

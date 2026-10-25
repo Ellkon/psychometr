@@ -31,6 +31,8 @@ import { RegistryService } from './domain/registry.js';
 import { TherapyService } from './domain/therapy.js';
 import { AlertHub, AlertService } from './domain/alerts.js';
 import { registerAlertRoutes } from './routes/alerts.js';
+import { SecuritySignalService } from './domain/security-signals.js';
+import { registerSecurityRoutes } from './routes/security.js';
 import { AccessTokens } from './security/access-token.js';
 import { IdentityVault } from './security/identity.js';
 
@@ -108,25 +110,29 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     new RegistryService(db, options.clock),
   );
   registerAlertRoutes(app, auth, alerts, env.PUBLIC_ORIGIN);
+  const signals = new SecuritySignalService(db, options.clock);
+  registerSecurityRoutes(app, auth, signals);
   if (options.workers ?? true) {
     let running = false;
+    // Only the SQLSTATE or error name: driver messages can embed query parameters.
+    const logFailure = (job: string) => (error: unknown) => {
+      const code =
+        (error as { code?: unknown }).code ?? (error instanceof Error ? error.name : undefined);
+      app.log.error(
+        { job, errorCode: typeof code === 'string' ? code : 'unknown' },
+        'worker failed',
+      );
+    };
     const timer = setInterval(() => {
       if (running) return;
       running = true;
-      alerts
-        .tick()
-        .catch((error: unknown) => {
-          // Only the SQLSTATE or error name: driver messages can embed query parameters.
-          const code =
-            (error as { code?: unknown }).code ?? (error instanceof Error ? error.name : undefined);
-          app.log.error(
-            { errorCode: typeof code === 'string' ? code : 'unknown' },
-            'alert worker tick failed',
-          );
-        })
-        .finally(() => {
-          running = false;
-        });
+      // Independent jobs: a failing alert pass must not stop anomaly detection, and back.
+      void Promise.all([
+        alerts.tick().catch(logFailure('alerts')),
+        signals.check().catch(logFailure('security_signals')),
+      ]).finally(() => {
+        running = false;
+      });
     }, ALERT_TICK_MS);
     timer.unref();
     app.addHook('onClose', (_instance, done) => {

@@ -64,6 +64,20 @@
       "when": 1792913123515,
       "tag": "0008_alerts_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792915770191,
+      "tag": "0009_security_signals",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792915771466,
+      "tag": "0010_security_signals_permissions",
+      "breakpoints": true
     }
   ]
 }

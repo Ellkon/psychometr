@@ -29,4 +29,6 @@ export * from './therapy.js';
 
 export * from './alerts.js';
 
+export * from './security.js';
+
 export type { ZodType as ResponseSchema } from 'zod';
