@@ -275,6 +275,22 @@ describe('therapy diary', () => {
 });
 
 describe('registry and timeline', () => {
+  it('an activity newer than the registry read time is zero weeks, not a 500 (load finding)', async () => {
+    await prescribe([timeIn(30)]);
+    const enrolled = await f.enroll();
+    const patient = await patientLogin(enrolled);
+    await f.request('POST', `${base(f.patientId)}/adverse-events`, patient, adverse());
+    // The registry read starts a moment before the mark was stored, as under concurrent load.
+    f.advance(-60_000);
+    const doctor = await doctorLogin();
+    const response = await f.request('GET', '/api/registry', doctor);
+    expect(response.statusCode).toBe(200);
+    const row = RegistrySchema.parse(response.json<unknown>()).patients.find(
+      (candidate) => candidate.patientId === f.patientId,
+    );
+    expect(row?.weeksWithoutContact).toBe(0);
+  });
+
   it('shows facts per patient and marks the patient reviewed after the doctor opens them', async () => {
     await prescribe([timeIn(30), timeIn(40)]);
     const enrolled = await f.enroll();

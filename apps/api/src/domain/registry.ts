@@ -196,8 +196,9 @@ export class RegistryService {
       scores,
       safetySignal: lastPhq9?.safetySignal ?? false,
       lastActivityAt: lastActivity?.toISOString() ?? null,
+      // A concurrent mark can be newer than `now` taken at the start of this read: never negative.
       weeksWithoutContact: lastActivity
-        ? Math.floor((now.getTime() - lastActivity.getTime()) / WEEK_MS)
+        ? Math.max(0, Math.floor((now.getTime() - lastActivity.getTime()) / WEEK_MS))
         : null,
       dueScales,
       activeMedications: active.length,
