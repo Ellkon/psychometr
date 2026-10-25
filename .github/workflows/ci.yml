@@ -1,0 +1,203 @@
+# Security gates required by NFR-2 (docs/TZ.md §5).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [development]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: lint · typecheck · tests · content
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      # Includes real PostgreSQL 16, migrations, DB privileges, IDOR matrix,
+      # concurrent invitation redemption, refresh replay and audit-chain tests.
+      - run: pnpm test
+      - run: pnpm check:content
+      - run: pnpm build
+
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-24.04
+    env:
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Use the MIT-licensed CLI, not the separately licensed gitleaks-action.
+      # No PR write permissions, license key, or third-party API calls are needed.
+      - name: Install Gitleaks (verified release archive)
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          cd "$RUNNER_TEMP/gitleaks"
+          release="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location "$release/$archive" -o "$archive"
+          curl --fail --silent --show-error --location \
+            "$release/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o checksums.txt
+          grep " ${archive}$" checksums.txt | sha256sum --check --strict
+          tar xzf "$archive" gitleaks
+      - name: Scan all history reachable from this PR (redacted)
+        run: |
+          mkdir -p .ci-reports
+          # HEAD includes the PR and its ancestors, not unrelated remote branches.
+          "$RUNNER_TEMP/gitleaks/gitleaks" git . --log-opts=HEAD --redact=100 \
+            --report-format=json --report-path=.ci-reports/gitleaks.json
+      - name: Annotate secret locations without values
+        if: always()
+        run: node scripts/annotate-security.mjs gitleaks .ci-reports/gitleaks.json
+
+  semgrep:
+    name: semgrep
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Scan with all required rule packs
+        run: |
+          mkdir -p .ci-reports
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/src" -w /src semgrep/semgrep:1.182.1 \
+            semgrep scan --config p/typescript --config p/owasp-top-ten --config p/jwt \
+            --error --strict --metrics=off --disable-version-check \
+            --json-output=.ci-reports/semgrep.json .
+      - name: Annotate findings
+        if: always()
+        run: node scripts/annotate-security.mjs semgrep .ci-reports/semgrep.json
+
+  audit:
+    name: pnpm audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level=high
+
+  trivy:
+    name: trivy fs + images
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Generate ephemeral build configuration outside the workspace
+        run: node scripts/init-local-env.mjs "$RUNNER_TEMP/compass.env"
+      - name: Build stack images
+        run: docker compose --env-file "$RUNNER_TEMP/compass.env" -f infra/docker-compose.yml build
+      - run: mkdir -p .ci-reports
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: false
+          format: json
+          output: .ci-reports/trivy-fs.json
+      - name: Annotate filesystem findings
+        if: always()
+        run: node scripts/annotate-security.mjs trivy .ci-reports/trivy-fs.json
+      - name: Trivy image scan (api)
+        if: ${{ !cancelled() }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: psychometr-api:local
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: false
+          format: json
+          output: .ci-reports/trivy-api.json
+      - name: Annotate API image findings
+        if: always()
+        run: node scripts/annotate-security.mjs trivy .ci-reports/trivy-api.json
+      - name: Trivy image scan (web)
+        if: ${{ !cancelled() }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: psychometr-web:local
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: false
+          format: json
+          output: .ci-reports/trivy-web.json
+      - name: Annotate web image findings
+        if: always()
+        run: node scripts/annotate-security.mjs trivy .ci-reports/trivy-web.json
+
+  stack:
+    name: ZAP baseline + Playwright
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Generate ephemeral secrets and synthetic test consent
+        run: node scripts/init-local-env.mjs "$RUNNER_TEMP/compass.env" --test-consent
+      - name: 'Start stack (HTTPS auth; HTTP loopback for ZAP only)'
+        run: docker compose --env-file "$RUNNER_TEMP/compass.env" -f infra/docker-compose.yml -f infra/docker-compose.ci.yml up -d --build --wait --wait-timeout 120
+      - name: Verify API through Caddy
+        run: curl --fail --show-error http://127.0.0.1:8080/api/health
+      - name: OWASP ZAP baseline
+        run: |
+          mkdir -p .ci-reports/zap
+          # Only this disposable report directory is writable by the ZAP user.
+          chmod 777 .ci-reports/zap
+          docker run --rm --network host \
+            -v "$PWD/.ci-reports/zap:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://127.0.0.1:8080 -I -r zap-baseline.html -T 5 -m 1
+      - name: Install Playwright browsers
+        if: ${{ !cancelled() }}
+        run: pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
+      - name: Bootstrap synthetic administrator
+        id: bootstrap
+        if: ${{ !cancelled() }}
+        run: node scripts/bootstrap-admin.mjs "$RUNNER_TEMP/compass.env" --ci
+      - name: Playwright auth and smoke tests
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
+        run: pnpm test:e2e
+        env:
+          E2E_ENV_FILE: ${{ runner.temp }}/compass.env
+          WEB_BASE_URL: https://localhost:8443
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: scan-reports
+          path: |
+            .ci-reports/zap/zap-baseline.html
+            playwright-report/
+          include-hidden-files: true
+          if-no-files-found: ignore
+      - name: Stack diagnostics on failure
+        if: failure()
+        run: docker compose --env-file "$RUNNER_TEMP/compass.env" -f infra/docker-compose.yml -f infra/docker-compose.ci.yml logs --no-color
+      - name: Stop stack
+        if: always()
+        run: docker compose --env-file "$RUNNER_TEMP/compass.env" -f infra/docker-compose.yml -f infra/docker-compose.ci.yml down -v

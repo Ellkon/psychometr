@@ -1,0 +1,631 @@
+/**
+ * Doctor alerts (FR-8): transactional outbox in PostgreSQL, delivery over WebSocket,
+ * acknowledgement by the recipient, and escalation to a reserve doctor (FR-8.3).
+ *
+ * Adverse event notifications (FR-6) and contact requests (FR-12) share the outbox and delivery: severity `warning`, written
+ * in the report's transaction, never escalated. They carry no clinical rule: the owner decided on
+ * 2026-10-25 to notify the doctor of every report; grading by severity needs a clinical source.
+ *
+ * An alert is raised for every firing of a `critical` rule (content/rules), in the same transaction
+ * as the rule evaluation and the answer that caused it, so an alert cannot exist without its source
+ * and a rolled-back answer leaves no alert. The text is the rule's own message and suggested
+ * action; nothing clinical is written here. Delivery is at-least-once: the client de-duplicates by
+ * alert id.
+ *
+ * Limitation: the socket registry is in memory, so delivery assumes one API instance. Several
+ * instances would need PostgreSQL LISTEN/NOTIFY or a shared broker; the outbox rows already hold
+ * the state, so only the wake-up path would change.
+ */
+import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import {
+  CONTACT_RESPONSE_WORKING_DAYS,
+  ESCALATION_MINUTES,
+  addWorkingDays,
+  adverseSeverityLabel,
+  contactReasonLabel,
+  contactTimeLabel,
+  type AdverseSeverity,
+  type ContactReason,
+  type ContactTime,
+  type Alert,
+  type Principal,
+  type Rule,
+} from '@psychometr/shared';
+import type { Database, Transaction } from '../db/client.js';
+import { alerts, careTeam, patientIdentity } from '../db/schema.js';
+import type { IdentityVault } from '../security/identity.js';
+import { assertRole, authorized } from './access.js';
+import { appendAudit } from './audit.js';
+import { DomainError } from './errors.js';
+
+type AlertRow = typeof alerts.$inferSelect;
+type Db = Database | Transaction;
+
+const ESCALATION_MS = ESCALATION_MINUTES * 60_000;
+/** A sent but unacknowledged alert is re-sent to a reconnected socket after this delay. */
+const RESEND_AFTER_MS = 30_000;
+const BATCH = 100;
+const MAX_SOCKETS_PER_DOCTOR = 10;
+/** How often open sockets are re-checked against their session (revocation, logout, idle). */
+const SWEEP_MS = 30_000;
+/** Close code for a socket whose session ended; the client refreshes and reconnects (or stops). */
+const CLOSE_SESSION_ENDED = 4401;
+
+/**
+ * Recipient is still on the patient's care team. Revoking a doctor's assignment must stop their
+ * alerts at once, including the patient name inside them (FR-8, S-2). Correlated to alerts row.
+ */
+const stillAssigned = sql`exists (select 1 from ${careTeam} where ${careTeam.patientId} = ${alerts.patientId} and ${careTeam.practitionerId} = ${alerts.recipientId})`;
+
+export interface SocketLike {
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+}
+
+/** Re-checks the session behind a socket. False means the socket must close (fails closed). */
+export type LiveCheck = () => Promise<boolean>;
+
+export interface SocketEntry {
+  practitionerId: string;
+  socket: SocketLike;
+  live: LiveCheck;
+}
+
+/** In-memory map of authenticated doctor sockets. */
+export class AlertHub {
+  private readonly sockets = new Map<string, Map<SocketLike, LiveCheck>>();
+
+  register(practitionerId: string, socket: SocketLike, live: LiveCheck): boolean {
+    const set = this.sockets.get(practitionerId) ?? new Map<SocketLike, LiveCheck>();
+    if (set.size >= MAX_SOCKETS_PER_DOCTOR) return false;
+    set.set(socket, live);
+    this.sockets.set(practitionerId, set);
+    return true;
+  }
+
+  unregister(practitionerId: string, socket: SocketLike): void {
+    const set = this.sockets.get(practitionerId);
+    if (!set) return;
+    set.delete(socket);
+    if (set.size === 0) this.sockets.delete(practitionerId);
+  }
+
+  connected(practitionerId: string): SocketLike[] {
+    return [...(this.sockets.get(practitionerId)?.keys() ?? [])];
+  }
+
+  /** Doctors with at least one open socket. */
+  connectedIds(): string[] {
+    return [...this.sockets.keys()];
+  }
+
+  entries(): SocketEntry[] {
+    const all: SocketEntry[] = [];
+    for (const [practitionerId, set] of this.sockets) {
+      for (const [socket, live] of set) all.push({ practitionerId, socket, live });
+    }
+    return all;
+  }
+}
+
+/**
+ * First doctor of the care team. Every patient is created with one, so a missing doctor is a
+ * broken invariant: fail loudly, a signal must never be dropped silently.
+ */
+async function primaryRecipient(tx: Transaction, patientId: string): Promise<string> {
+  const [primary] = await tx
+    .select({ id: careTeam.practitionerId })
+    .from(careTeam)
+    .where(eq(careTeam.patientId, patientId))
+    .orderBy(asc(careTeam.assignedAt), asc(careTeam.practitionerId))
+    .limit(1);
+  if (!primary) throw new Error('Alert recipient missing: patient has no care team');
+  return primary.id;
+}
+
+/** Reserve recipient: the next care-team member in assignment order, never the current recipient. */
+export function pickReserve(careTeamInOrder: readonly string[], current: string): string | null {
+  return careTeamInOrder.find((id) => id !== current) ?? null;
+}
+
+/** Delivery timings for monitoring (NFR-3); seconds from creation. Optional in tests. */
+export interface AlertMetrics {
+  delivered(seconds: number): void;
+  acknowledged(seconds: number): void;
+}
+
+export class AlertService {
+  /** Set by the app after the metrics plugin is registered. */
+  metrics: AlertMetrics | undefined;
+
+  constructor(
+    private readonly db: Database,
+    private readonly vault: IdentityVault,
+    readonly hub: AlertHub = new AlertHub(),
+    private readonly now: () => Date = () => new Date(),
+  ) {}
+
+  /** Last time open sockets were re-checked; the sweep runs at most every SWEEP_MS. */
+  private lastSweep = Number.NEGATIVE_INFINITY;
+
+  /**
+   * Called inside the rule-evaluation transaction for a fired rule. Only `critical` rules raise
+   * an alert (FR-8.4: hard signals are rare; the rest stays a non-intrusive card).
+   */
+  async raise(
+    tx: Transaction,
+    patientId: string,
+    evaluationId: string,
+    rule: Pick<Rule, 'id' | 'severity' | 'message' | 'suggested_action'>,
+    now: Date,
+  ): Promise<void> {
+    if (rule.severity !== 'critical') return;
+    const primary = await primaryRecipient(tx, patientId);
+    const inserted = await tx
+      .insert(alerts)
+      .values({
+        patientId,
+        recipientId: primary,
+        source: 'rule',
+        evaluationId,
+        ruleId: rule.id,
+        severity: 'critical',
+        message: rule.message,
+        suggestedAction: rule.suggested_action,
+        status: 'pending',
+        idempotencyKey: `${evaluationId}:${primary}`,
+        createdAt: now,
+        escalateAt: new Date(now.getTime() + ESCALATION_MS),
+      })
+      .onConflictDoNothing({ target: alerts.idempotencyKey })
+      .returning({ id: alerts.id });
+    if (inserted.length > 0)
+      await appendAudit(
+        tx,
+        { action: 'alert.created', resourceId: patientId, detail: rule.id },
+        now,
+      );
+  }
+
+  /**
+   * Called inside the transaction that stores the patient's adverse event report. The text is
+   * fixed and names only the patient's own severity rating; the description stays in the record.
+   */
+  async raiseAdverseEvent(
+    tx: Transaction,
+    patientId: string,
+    adverseEventId: string,
+    severity: AdverseSeverity,
+    now: Date,
+  ): Promise<void> {
+    // eslint-disable-next-line security/detect-object-injection -- severity is a zod enum value
+    const label = adverseSeverityLabel[severity].toLowerCase();
+    await this.raiseNotice(tx, patientId, now, {
+      source: 'adverse_event',
+      adverseEventId,
+      message: `Пациент сообщил о нежелательном явлении. Тяжесть по оценке пациента: ${label}.`,
+      suggestedAction: 'Просмотреть запись в карте пациента.',
+      idempotencyKey: `adverse_event:${adverseEventId}`,
+    });
+  }
+
+  /** Called inside the transaction that stores the patient's contact request (FR-12). */
+  async raiseContactRequest(
+    tx: Transaction,
+    patientId: string,
+    contactRequestId: string,
+    reason: ContactReason,
+    preferredTime: ContactTime,
+    now: Date,
+  ): Promise<void> {
+    // eslint-disable-next-line security/detect-object-injection -- zod enum values
+    const why = `${contactReasonLabel[reason]}. Удобное время: ${contactTimeLabel[preferredTime].toLowerCase()}.`;
+    await this.raiseNotice(tx, patientId, now, {
+      source: 'contact_request',
+      contactRequestId,
+      message: `Пациент просит связаться. ${why}`,
+      suggestedAction: 'Связаться с пациентом и записать контакт в карте.',
+      idempotencyKey: `contact_request:${contactRequestId}`,
+      // Not answered in time: the reserve doctor gets a copy (FR-8.3 mechanism).
+      escalateAt: addWorkingDays(now, CONTACT_RESPONSE_WORKING_DAYS),
+    });
+  }
+
+  /**
+   * Closes the open contact-request notifications of a patient once a doctor has recorded a
+   * contact (FR-12). Runs in the contact's transaction; the acknowledging doctor is audited.
+   */
+  async acknowledgeContactRequests(
+    tx: Transaction,
+    user: Principal,
+    patientId: string,
+    requestIds: readonly string[],
+    now: Date,
+  ): Promise<void> {
+    if (requestIds.length === 0) return;
+    const closed = await tx
+      .update(alerts)
+      .set({ status: 'acknowledged', acknowledgedAt: now, acknowledgedBy: user.id })
+      .where(
+        and(
+          eq(alerts.patientId, patientId),
+          inArray(alerts.contactRequestId, [...requestIds]),
+          isNull(alerts.acknowledgedAt),
+        ),
+      )
+      .returning({ id: alerts.id });
+    // One record per closed alert, as for a manual acknowledgement.
+    for (let i = 0; i < closed.length; i++)
+      await appendAudit(
+        tx,
+        {
+          action: 'alert.acknowledged',
+          actorId: user.id,
+          resourceId: patientId,
+          detail: 'contact_request',
+        },
+        now,
+      );
+  }
+
+  /** A quiet notification (`warning`) for the patient's primary doctor. */
+  private async raiseNotice(
+    tx: Transaction,
+    patientId: string,
+    now: Date,
+    notice: {
+      source: 'adverse_event' | 'contact_request';
+      adverseEventId?: string;
+      contactRequestId?: string;
+      message: string;
+      suggestedAction: string;
+      idempotencyKey: string;
+      escalateAt?: Date;
+    },
+  ): Promise<void> {
+    const primary = await primaryRecipient(tx, patientId);
+    const inserted = await tx
+      .insert(alerts)
+      .values({
+        patientId,
+        recipientId: primary,
+        source: notice.source,
+        adverseEventId: notice.adverseEventId ?? null,
+        contactRequestId: notice.contactRequestId ?? null,
+        severity: 'warning',
+        message: notice.message,
+        suggestedAction: notice.suggestedAction,
+        status: 'pending',
+        idempotencyKey: `${notice.idempotencyKey}:${primary}`,
+        createdAt: now,
+        escalateAt: notice.escalateAt ?? null,
+      })
+      .onConflictDoNothing({ target: alerts.idempotencyKey })
+      .returning({ id: alerts.id });
+    if (inserted.length > 0)
+      await appendAudit(
+        tx,
+        { action: 'alert.created', resourceId: patientId, detail: notice.source },
+        now,
+      );
+  }
+
+  /**
+   * Doctor's open alerts (not yet acknowledged): critical first, then newest first, so a pile of
+   * adverse event notifications can never push a critical alert out of the page.
+   */
+  async list(user: Principal): Promise<{ alerts: Alert[] }> {
+    return authorized(this.db, user, async (tx) => {
+      assertRole(user, 'doctor');
+      const rows = await tx
+        .select()
+        .from(alerts)
+        .where(and(eq(alerts.recipientId, user.id), isNull(alerts.acknowledgedAt), stillAssigned))
+        .orderBy(desc(sql`${alerts.severity} = 'critical'`), desc(alerts.createdAt))
+        .limit(100);
+      const views = await this.views(tx, rows);
+      await appendAudit(tx, { action: 'alerts.viewed', actorId: user.id }, this.now());
+      return { alerts: views };
+    });
+  }
+
+  /** Acknowledgement by the recipient only. Another doctor gets 404, so existence is not revealed. */
+  async ack(user: Principal, alertId: string): Promise<{ ok: true }> {
+    return authorized(this.db, user, async (tx) => {
+      assertRole(user, 'doctor');
+      const [row] = await tx
+        .select()
+        .from(alerts)
+        .where(and(eq(alerts.id, alertId), eq(alerts.recipientId, user.id), stillAssigned));
+      if (!row) throw new DomainError(404, 'alert_not_found', 'Алерт не найден');
+      if (row.acknowledgedAt) return { ok: true as const };
+      const now = this.now();
+      const updated = await tx
+        .update(alerts)
+        .set({ status: 'acknowledged', acknowledgedAt: now, acknowledgedBy: user.id })
+        .where(and(eq(alerts.id, alertId), isNull(alerts.acknowledgedAt)))
+        .returning({ id: alerts.id });
+      // A concurrent acknowledgement won the row lock: one audit record per alert.
+      if (updated.length === 0) return { ok: true as const };
+      this.metrics?.acknowledged((now.getTime() - row.createdAt.getTime()) / 1000);
+      await appendAudit(
+        tx,
+        {
+          action: 'alert.acknowledged',
+          actorId: user.id,
+          resourceId: row.patientId,
+          detail: row.ruleId ?? row.source,
+        },
+        now,
+      );
+      return { ok: true as const };
+    });
+  }
+
+  /** Client confirmed it received the alert over the socket: sent → delivered. */
+  async markReceived(practitionerId: string, alertId: string): Promise<void> {
+    const now = this.now();
+    const updated = await this.db
+      .update(alerts)
+      .set({ status: 'delivered', deliveredAt: now })
+      .where(
+        and(
+          eq(alerts.id, alertId),
+          eq(alerts.recipientId, practitionerId),
+          eq(alerts.status, 'sent'),
+          stillAssigned,
+        ),
+      )
+      .returning({ createdAt: alerts.createdAt });
+    for (const row of updated)
+      this.metrics?.delivered((now.getTime() - row.createdAt.getTime()) / 1000);
+  }
+
+  /** Sends every open undelivered alert to a socket that has just authenticated. */
+  async flushFor(practitionerId: string, socket: SocketLike, now = this.now()): Promise<number> {
+    const rows = await this.db
+      .select()
+      .from(alerts)
+      .where(
+        and(
+          eq(alerts.recipientId, practitionerId),
+          isNull(alerts.acknowledgedAt),
+          or(eq(alerts.status, 'pending'), eq(alerts.status, 'sent')),
+          stillAssigned,
+        ),
+      )
+      .orderBy(asc(alerts.createdAt))
+      .limit(BATCH);
+    let delivered = 0;
+    for (const row of rows) if (await this.deliverSafely(row, [socket], now)) delivered++;
+    return delivered;
+  }
+
+  /** One outbox pass: pending alerts, and sent ones whose last attempt is stale. */
+  async dispatch(now = this.now()): Promise<number> {
+    const staleBefore = new Date(now.getTime() - RESEND_AFTER_MS);
+    // Only doctors who can receive now: a backlog for offline doctors must not fill the batch
+    // and starve live delivery to connected ones. Offline doctors get theirs on connect.
+    const online = this.hub.connectedIds();
+    if (online.length === 0) return 0;
+    const rows = await this.db
+      .select()
+      .from(alerts)
+      .where(
+        and(
+          inArray(alerts.recipientId, online),
+          isNull(alerts.acknowledgedAt),
+          stillAssigned,
+          or(
+            eq(alerts.status, 'pending'),
+            and(
+              eq(alerts.status, 'sent'),
+              or(isNull(alerts.attemptedAt), lte(alerts.attemptedAt, staleBefore)),
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(alerts.createdAt))
+      .limit(BATCH);
+    let attempted = 0;
+    for (const row of rows) {
+      const sockets = this.hub.connected(row.recipientId);
+      if (sockets.length === 0) continue;
+      if (await this.deliverSafely(row, sockets, now)) attempted++;
+    }
+    return attempted;
+  }
+
+  /**
+   * Escalation (FR-8.3): an unacknowledged primary alert whose timer has passed gets a copy for
+   * the reserve doctor. The copy is not escalated again. With no reserve, the timer is cleared
+   * and the event is audited once; the alert stays open in the doctor's list.
+   */
+  async escalate(now = this.now()): Promise<number> {
+    const due = await this.db
+      .select({ id: alerts.id })
+      .from(alerts)
+      .where(
+        and(lte(alerts.escalateAt, now), isNull(alerts.acknowledgedAt), isNull(alerts.escalatedAt)),
+      )
+      .limit(BATCH);
+    let handled = 0;
+    for (const { id } of due) {
+      const done = await this.db.transaction(async (tx) => {
+        const [locked] = await tx
+          .select()
+          .from(alerts)
+          .where(eq(alerts.id, id))
+          .for('update', { skipLocked: true });
+        if (
+          !locked ||
+          locked.acknowledgedAt ||
+          locked.escalatedAt ||
+          !locked.escalateAt ||
+          locked.escalateAt > now
+        )
+          return false;
+        const team = await tx
+          .select({ id: careTeam.practitionerId })
+          .from(careTeam)
+          .where(eq(careTeam.patientId, locked.patientId))
+          .orderBy(asc(careTeam.assignedAt), asc(careTeam.practitionerId));
+        const reserve = pickReserve(
+          team.map((member) => member.id),
+          locked.recipientId,
+        );
+        if (reserve) {
+          await tx
+            .insert(alerts)
+            .values({
+              patientId: locked.patientId,
+              recipientId: reserve,
+              source: locked.source,
+              evaluationId: locked.evaluationId,
+              adverseEventId: locked.adverseEventId,
+              contactRequestId: locked.contactRequestId,
+              ruleId: locked.ruleId,
+              severity: locked.severity,
+              message: locked.message,
+              suggestedAction: locked.suggestedAction,
+              status: 'pending',
+              idempotencyKey: `escalation:${locked.id}`,
+              escalationOf: locked.id,
+              createdAt: now,
+            })
+            .onConflictDoNothing({ target: alerts.idempotencyKey });
+          await tx
+            .update(alerts)
+            .set({ escalatedAt: now, escalateAt: null })
+            .where(eq(alerts.id, locked.id));
+          await appendAudit(
+            tx,
+            {
+              action: 'alert.escalated',
+              resourceId: locked.patientId,
+              detail: locked.ruleId ?? locked.source,
+            },
+            now,
+          );
+        } else {
+          await tx.update(alerts).set({ escalateAt: null }).where(eq(alerts.id, locked.id));
+          await appendAudit(
+            tx,
+            {
+              action: 'alert.escalation_unavailable',
+              resourceId: locked.patientId,
+              detail: locked.ruleId ?? locked.source,
+            },
+            now,
+          );
+        }
+        return true;
+      });
+      if (done) handled++;
+    }
+    return handled;
+  }
+
+  /** One worker tick: deliver, then escalate. Safe to call repeatedly. */
+  async tick(now = this.now()): Promise<{ dispatched: number; escalated: number }> {
+    await this.sweepSockets(now);
+    const dispatched = await this.dispatch(now);
+    const escalated = await this.escalate(now);
+    return { dispatched, escalated };
+  }
+
+  /** Logout or revocation: re-check sockets at the next tick instead of within 30 s. */
+  requestSweep(): void {
+    this.lastSweep = Number.NEGATIVE_INFINITY;
+  }
+
+  /**
+   * Re-checks every open socket against its session. A revoked, expired, idle or deactivated
+   * session closes the socket with 4401. Errors count as "not live": fail closed.
+   */
+  async sweepSockets(now = this.now()): Promise<number> {
+    if (now.getTime() - this.lastSweep < SWEEP_MS) return 0;
+    this.lastSweep = now.getTime();
+    let closed = 0;
+    for (const entry of this.hub.entries()) {
+      const live = await entry.live().catch(() => false);
+      if (live) continue;
+      this.hub.unregister(entry.practitionerId, entry.socket);
+      entry.socket.close(CLOSE_SESSION_ENDED, 'session_ended');
+      closed++;
+    }
+    return closed;
+  }
+
+  /** One failed row must not stop the pass: the next tick retries it. */
+  private async deliverSafely(row: AlertRow, sockets: SocketLike[], now: Date): Promise<boolean> {
+    try {
+      return await this.deliver(row, sockets, now);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Records the attempt first, conditionally, then sends. The condition skips a row that was
+   * acknowledged (or moved on) after it was read, instead of tripping the transition guard; and
+   * writing before sending means a fast `received` can never arrive before `sent`.
+   */
+  private async deliver(row: AlertRow, sockets: SocketLike[], now: Date): Promise<boolean> {
+    const claimed = await this.db
+      .update(alerts)
+      .set({
+        attemptedAt: now,
+        ...(row.status === 'pending' ? { status: 'sent' as const, sentAt: now } : {}),
+      })
+      .where(
+        and(eq(alerts.id, row.id), eq(alerts.status, row.status), isNull(alerts.acknowledgedAt)),
+      )
+      .returning();
+    const [current] = claimed;
+    if (!current) return false;
+    const [view] = await this.views(this.db, [current]);
+    const message = JSON.stringify({ type: 'alert', alert: view });
+    for (const socket of sockets) {
+      try {
+        socket.send(message);
+      } catch {
+        // A dead socket is removed by its own close handler; the row stays open for the next socket.
+      }
+    }
+    return true;
+  }
+
+  /** One identity query per batch, not per alert. */
+  private async views(tx: Db, rows: AlertRow[]): Promise<Alert[]> {
+    if (rows.length === 0) return [];
+    const ids = [...new Set(rows.map((row) => row.patientId))];
+    const identities = await tx
+      .select()
+      .from(patientIdentity)
+      .where(inArray(patientIdentity.patientId, ids));
+    const names = new Map<string, string>();
+    for (const identity of identities) {
+      const decrypted = this.vault.decrypt(identity.patientId, identity);
+      names.set(identity.patientId, `${decrypted.lastName} ${decrypted.firstName}`);
+    }
+    return rows.map((row) => {
+      const patientName = names.get(row.patientId);
+      if (patientName === undefined) throw new Error('Patient identity missing');
+      return {
+        id: row.id,
+        source: row.source,
+        ruleId: row.ruleId,
+        severity: row.severity,
+        patientId: row.patientId,
+        patientName,
+        message: row.message,
+        suggestedAction: row.suggestedAction,
+        status: row.status,
+        createdAt: row.createdAt.toISOString(),
+        acknowledgedAt: row.acknowledgedAt?.toISOString() ?? null,
+        escalatedFrom: row.escalationOf,
+      };
+    });
+  }
+}

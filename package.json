@@ -1,0 +1,38 @@
+{
+  "name": "psychometr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Клинический компас — digital assistant for therapy accompaniment (PHQ-9/GAD-7, dose diary, safety rules, alerting)",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter @psychometr/shared build && pnpm --parallel --filter @psychometr/shared --filter @psychometr/api --filter @psychometr/web dev",
+    "lint": "pnpm --filter @psychometr/shared build && pnpm -r lint",
+    "typecheck": "pnpm --filter @psychometr/shared build && pnpm -r typecheck",
+    "test": "node --test scripts/*.test.mjs && pnpm --filter @psychometr/shared build && pnpm -r test",
+    "test:e2e": "pnpm --filter @psychometr/shared build && playwright test",
+    "check:content": "node scripts/check-content.mjs",
+    "import:grls": "node scripts/import-grls.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @psychometr/api db:generate",
+    "db:migrate": "pnpm --filter @psychometr/api db:migrate",
+    "setup:local": "node scripts/init-local-env.mjs",
+    "admin:create": "pnpm --filter @psychometr/api admin:create",
+    "admin:bootstrap": "node scripts/bootstrap-admin.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.56.0",
+    "@psychometr/shared": "workspace:*",
+    "eslint": "10.12.0",
+    "eslint-plugin-security": "^4.2.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "8.71.2"
+  }
+}

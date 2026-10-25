@@ -1,0 +1,143 @@
+# Synthetic/demo deployment. No real patient data before the security/legal audit.
+# Initialize a private env file with `pnpm setup:local`; never use shared defaults.
+name: psychometr
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: psychometr
+      POSTGRES_USER: psychometr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run pnpm setup:local}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Run pnpm setup:local}
+      POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:?Run pnpm setup:local}
+    command:
+      [
+        'postgres',
+        '-c',
+        'log_statement=none',
+        '-c',
+        'log_min_error_statement=panic',
+        '-c',
+        'log_error_verbosity=terse',
+        '-c',
+        'log_parameter_max_length=0',
+        '-c',
+        'log_parameter_max_length_on_error=0',
+        '-c',
+        'log_connections=on',
+        '-c',
+        'log_disconnections=on',
+        '-c',
+        'password_encryption=scram-sha-256',
+      ]
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    networks: [database]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U psychometr -d psychometr']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    image: psychometr-api:local
+    command: ['node', 'apps/api/dist/cli/migrate.js']
+    restart: 'no'
+    environment:
+      MIGRATION_DATABASE_URL: postgresql://migrator:${POSTGRES_MIGRATOR_PASSWORD:?Run pnpm setup:local}@db:5432/psychometr
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    image: psychometr-api:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      LOG_LEVEL: info
+      TRUST_PROXY: one-hop
+      DATABASE_URL: postgresql://app:${POSTGRES_APP_PASSWORD:?Run pnpm setup:local}@db:5432/psychometr
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Run pnpm setup:local}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Run pnpm setup:local}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-https://localhost:8443}
+      CONSENT_VERSION: ${CONSENT_VERSION:-}
+      CONSENT_TEXT_PATH: ${CONSENT_TEXT_PATH:-}
+    volumes:
+      - ./consent:/run/consent:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [database, frontend]
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    image: psychometr-web:local
+    restart: unless-stopped
+    environment:
+      APP_HOST: ${APP_HOST:-localhost}
+    ports:
+      - '8443:443'
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [frontend]
+
+  # S-10: `docker compose --profile tools run --rm backup backup` (see infra/backup/README.md).
+  backup:
+    build: ./backup
+    image: psychometr-backup:local
+    profiles: [tools]
+    # Runs as the host user, so dumps land in BACKUP_DIR owned by that user (mode 0600).
+    user: ${BACKUP_UID:-1000}:${BACKUP_GID:-1000}
+    environment:
+      PGHOST: db
+      PGUSER: psychometr
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Run pnpm setup:local}
+      PGDATABASE: psychometr
+      AGE_RECIPIENT: ${AGE_RECIPIENT:-}
+      AGE_IDENTITY_FILE: /run/age/key.txt
+    volumes:
+      - ${BACKUP_DIR:-../backups}:/backups
+      - ${AGE_IDENTITY_PATH:-/dev/null}:/run/age/key.txt:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
+
+networks:
+  database:
+    internal: true
+  frontend:
+    driver: bridge
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

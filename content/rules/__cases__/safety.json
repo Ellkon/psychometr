@@ -1,0 +1,114 @@
+[
+  {
+    "rule_id": "phq9_item9_positive",
+    "cases": [
+      {
+        "facts": {
+          "phq9_item9_positive": true
+        },
+        "triggered": true
+      },
+      {
+        "facts": {
+          "phq9_item9_positive": false
+        },
+        "triggered": false
+      },
+      {
+        "facts": {
+          "phq9_item9_positive": "unknown"
+        },
+        "triggered": false
+      }
+    ]
+  },
+  {
+    "rule_id": "gad7_band_medium",
+    "cases": [
+      {
+        "facts": {
+          "gad7_band": "Средний",
+          "gad7_total": 12
+        },
+        "triggered": true
+      },
+      {
+        "facts": {
+          "gad7_band": "Высокий",
+          "gad7_total": 17
+        },
+        "triggered": false
+      },
+      {
+        "facts": {
+          "gad7_band": "Умеренный",
+          "gad7_total": 7
+        },
+        "triggered": false
+      },
+      {
+        "facts": {
+          "gad7_band": "unknown",
+          "gad7_total": "unknown"
+        },
+        "triggered": false
+      }
+    ]
+  },
+  {
+    "rule_id": "gad7_band_high",
+    "cases": [
+      {
+        "facts": {
+          "gad7_band": "Средний",
+          "gad7_total": 12
+        },
+        "triggered": false
+      },
+      {
+        "facts": {
+          "gad7_band": "Высокий",
+          "gad7_total": 17
+        },
+        "triggered": true
+      },
+      {
+        "facts": {
+          "gad7_band": "Умеренный",
+          "gad7_total": 7
+        },
+        "triggered": false
+      },
+      {
+        "facts": {
+          "gad7_band": "unknown",
+          "gad7_total": "unknown"
+        },
+        "triggered": false
+      }
+    ]
+  },
+  {
+    "rule_id": "phq9_item9_psychiatric_followup",
+    "cases": [
+      {
+        "facts": {
+          "phq9_item9_positive": true
+        },
+        "triggered": true
+      },
+      {
+        "facts": {
+          "phq9_item9_positive": false
+        },
+        "triggered": false
+      },
+      {
+        "facts": {
+          "phq9_item9_positive": "unknown"
+        },
+        "triggered": false
+      }
+    ]
+  }
+]

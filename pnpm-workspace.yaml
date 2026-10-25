@@ -1,0 +1,35 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Keep the package store inside the repo so nothing piles up in $HOME.
+storeDir: .pnpm-store
+
+# Supply-chain protections for dependency updates (NFR-2).
+# Skip versions published less than seven days ago.
+minimumReleaseAge: 10080
+# Refuse versions that drop provenance/trust compared to earlier releases.
+trustPolicy: no-downgrade
+# Transitive deps must come from the registry, not git/tarball URLs.
+blockExoticSubdeps: true
+
+# Only these packages may run install scripts.
+allowBuilds:
+  esbuild: true
+  '@tailwindcss/oxide': true
+  workbox-build: true
+  '@embedded-postgres/darwin-arm64': true
+  '@embedded-postgres/darwin-x64': true
+  '@embedded-postgres/linux-arm': true
+  '@embedded-postgres/linux-arm64': true
+  '@embedded-postgres/linux-ia32': true
+  '@embedded-postgres/linux-ppc64': true
+  '@embedded-postgres/linux-x64': true
+  '@embedded-postgres/windows-x64': true
+
+overrides:
+  vite: 8.3.4
+  '@trickfilm400/rollup-plugin-off-main-thread': 4.0.0
+  'semver@6.3.1': 7.7.3
+  browserslist: 4.29.3
+  undici-types: 6.29.0

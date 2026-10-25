@@ -1,0 +1,20 @@
+@import 'tailwindcss';
+
+/* Self-hosted font stack: no external fonts (AGENTS.md — no CDN). */
+:root {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  color: #0f172a;
+  background-color: #f8fafc;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}

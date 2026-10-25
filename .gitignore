@@ -11,6 +11,8 @@ build/
 coverage/
 playwright-report/
 test-results/
+.ci-reports/
+apps/web/dev-dist/
 
 # Env and secrets
 .env
@@ -30,3 +32,8 @@ backups/
 .vscode/
 .idea/
 .DS_Store
+
+# Site-specific approved consent text
+infra/consent/*.txt
+.pnpm-store/
+.claude/worktrees/

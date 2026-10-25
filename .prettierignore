@@ -1,0 +1,10 @@
+dist/
+coverage/
+node_modules/
+pnpm-lock.yaml
+apps/web/dev-dist/
+.ci-reports/
+playwright-report/
+test-results/
+# Team-authored specs stay as-is (source of truth, docs/TZ.md).
+docs/
