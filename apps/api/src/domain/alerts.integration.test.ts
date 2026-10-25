@@ -174,7 +174,11 @@ describe('escalation to a reserve doctor (FR-8.3)', () => {
 
     const copy = await listAs(f.otherDoctor.accessToken);
     expect(copy).toHaveLength(1);
-    expect(copy[0]).toMatchObject({ ruleId: 'phq9_item9_positive', escalatedFrom: primary.id });
+    expect(copy[0]).toMatchObject({
+      source: 'rule',
+      ruleId: 'phq9_item9_positive',
+      escalatedFrom: primary.id,
+    });
     // The primary stays open: it was not acknowledged.
     expect(await listAs(f.doctor.accessToken)).toHaveLength(1);
     expect(await alertRows()).toHaveLength(2);
@@ -675,7 +679,7 @@ describe('dispatcher robustness (audit F2, F3)', () => {
         recipientId: f.otherDoctor.user.id,
         evaluationId: evaluation.id,
         ruleId: 'phq9_item9_positive',
-        severity: 'critical',
+        severity: 'critical' as const,
         message: 'm',
         suggestedAction: 's',
         status: 'pending' as const,
@@ -751,5 +755,128 @@ describe('receipt confirmations are bound to the recipient (audit F10)', () => {
     expect((await alertRows())[0]?.status).toBe('sent');
     await f.app.alerts.markReceived(f.doctor.user.id, idOf(row));
     expect((await alertRows())[0]?.status).toBe('delivered');
+  });
+});
+
+describe('adverse event notifications (FR-6, owner decision 2026-10-25)', () => {
+  async function reportAdverse(submissionId = randomUUID(), severity = 'moderate') {
+    return f.request('POST', `/api/patients/${f.patientId}/adverse-events`, patient, {
+      submissionId,
+      description: 'Синтетическое описание: головная боль',
+      severity,
+      startedOn: new Date().toISOString().slice(0, 10),
+      medicationRequestId: null,
+    });
+  }
+
+  it('a report notifies the primary doctor with a warning that names only the severity', async () => {
+    await f.db.insert(careTeam).values({
+      patientId: f.patientId,
+      practitionerId: f.otherDoctor.user.id,
+    });
+    expect((await reportAdverse()).statusCode).toBe(201);
+
+    const [alert, ...rest] = await listAs(f.doctor.accessToken);
+    expect(rest).toHaveLength(0);
+    expect(alert).toMatchObject({
+      source: 'adverse_event',
+      ruleId: null,
+      severity: 'warning',
+      message: 'Пациент сообщил о нежелательном явлении. Тяжесть по оценке пациента: умеренная.',
+      escalatedFrom: null,
+    });
+    // The free-text description stays in the record and never enters the alert.
+    expect(JSON.stringify(alert)).not.toContain('головная боль');
+    expect(await listAs(f.otherDoctor.accessToken)).toHaveLength(0);
+    expect(await auditCount('alert.created')).toBe(1);
+  });
+
+  it('critical alerts come first in the list, whatever their age', async () => {
+    await submitItem9(1);
+    f.advance(60_000);
+    await reportAdverse();
+    const list = await listAs(f.doctor.accessToken);
+    expect(list.map((alert) => alert.severity)).toEqual(['critical', 'warning']);
+  });
+
+  it('is never escalated, even with a reserve doctor and no acknowledgement', async () => {
+    await f.db.insert(careTeam).values({
+      patientId: f.patientId,
+      practitionerId: f.otherDoctor.user.id,
+    });
+    await reportAdverse(randomUUID(), 'severe');
+    const [row] = await alertRows();
+    expect(row?.escalateAt).toBeNull();
+
+    await service().tick(new Date(Date.now() + 120 * 60_000));
+    expect(await alertRows()).toHaveLength(1);
+    expect(await listAs(f.otherDoctor.accessToken)).toHaveLength(0);
+    expect(await auditCount('alert.escalated')).toBe(0);
+  });
+
+  it('parallel retries of one report raise exactly one notification', async () => {
+    const submissionId = randomUUID();
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, () => reportAdverse(submissionId)),
+    );
+    expect(responses.every((response) => response.statusCode < 300)).toBe(true);
+    expect(await alertRows()).toHaveLength(1);
+    expect(await auditCount('alert.created')).toBe(1);
+  });
+
+  it('is acknowledged and shown in the timeline like any alert', async () => {
+    await reportAdverse();
+    const [alert] = await listAs(f.doctor.accessToken);
+    const ack = await f.request('POST', `/api/alerts/${idOf(alert)}/ack`, f.doctor.accessToken, {});
+    expect(ack.statusCode).toBe(200);
+    expect(await listAs(f.doctor.accessToken)).toHaveLength(0);
+
+    const timeline = TimelineSchema.parse(
+      (
+        await f.request('GET', `/api/patients/${f.patientId}/timeline`, f.doctor.accessToken)
+      ).json<unknown>(),
+    );
+    expect(timeline.events.find((event) => event.kind === 'alert')).toMatchObject({
+      source: 'adverse_event',
+      ruleId: null,
+      status: 'acknowledged',
+    });
+  });
+
+  it('the database refuses a notification with an escalation timer or a rule alert without its rule', async () => {
+    await reportAdverse();
+    const [row] = await alertRows();
+    if (!row?.adverseEventId) throw new Error('no adverse event alert');
+    const base = {
+      patientId: f.patientId,
+      recipientId: f.doctor.user.id,
+      message: 'm',
+      suggestedAction: 's',
+      status: 'pending' as const,
+      createdAt: new Date(),
+    };
+    expect(
+      await dbError(
+        f.db.insert(alerts).values({
+          ...base,
+          source: 'adverse_event',
+          adverseEventId: row.adverseEventId,
+          severity: 'warning',
+          idempotencyKey: randomUUID(),
+          escalateAt: new Date(),
+        }),
+      ),
+    ).toMatch(/alerts_source_valid/);
+    expect(
+      await dbError(
+        f.db.insert(alerts).values({
+          ...base,
+          source: 'rule',
+          ruleId: 'phq9_item9_positive',
+          severity: 'critical',
+          idempotencyKey: randomUUID(),
+        }),
+      ),
+    ).toMatch(/alerts_source_valid/);
   });
 });

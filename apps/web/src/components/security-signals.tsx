@@ -10,8 +10,8 @@ import {
 } from '@psychometr/shared';
 import { sessionClient, useSession } from '../lib/session.js';
 import { Button, ErrorNotice } from './forms.js';
+import { formatDateTime } from '../lib/dates.js';
 
-const when = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 const POLL_MS = 30_000;
 
 const describe = (signal: SecuritySignal) =>
@@ -64,11 +64,11 @@ export function SecuritySignals() {
           <p className="font-semibold">Сигнал безопасности</p>
           <p>{describe(signal)}</p>
           <p className="text-xs">
-            {when.format(new Date(signal.createdAt))} · подробности в журнале аудита
+            {formatDateTime(signal.createdAt)} · подробности в журнале аудита
           </p>
           <div>
             <Button
-              aria-label={`Подтвердить сигнал от ${when.format(new Date(signal.createdAt))}`}
+              aria-label={`Подтвердить сигнал от ${formatDateTime(signal.createdAt)}`}
               onClick={() => void acknowledge(signal)}
             >
               Принял(а) к сведению

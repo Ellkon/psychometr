@@ -5,12 +5,12 @@ import { AlertListSchema, SuccessSchema, type Alert } from '@psychometr/shared';
 import { sessionClient, useSession } from '../lib/session.js';
 import { openAlertSocket, type AlertSocketStatus } from '../lib/alerts-socket.js';
 import { Button, ErrorNotice } from './forms.js';
-
-const when = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+import { formatDateTime } from '../lib/dates.js';
 
 /**
- * Critical alerts for the doctor (FR-8). Live over the socket, with the REST list as the source of
- * truth on load and after every change. Only critical alerts exist, so they are always shown in full.
+ * Doctor alerts (FR-8). Live over the socket, with the REST list as the source of truth on load
+ * and after every change. Critical rule alerts are loud (role="alert", red); adverse event
+ * notifications are quiet (FR-8.4: few hard signals, the rest non-intrusive).
  */
 export function AlertsCenter() {
   const { user } = useSession();
@@ -59,7 +59,7 @@ export function AlertsCenter() {
 
   const open = alerts.data?.alerts ?? [];
   return (
-    <section aria-label="Критичные алерты" className="mb-6 grid gap-3">
+    <section aria-label="Алерты" className="mb-6 grid gap-3">
       <p role="status" className="text-xs text-slate-500">
         {status === 'online'
           ? 'Уведомления в реальном времени: на связи.'
@@ -71,10 +71,17 @@ export function AlertsCenter() {
       {open.map((alert) => (
         <article
           key={alert.id}
-          role="alert"
-          className="grid gap-2 rounded-md border-2 border-red-600 bg-red-50 p-4 text-sm text-red-950"
+          role={alert.severity === 'critical' ? 'alert' : 'status'}
+          className={
+            alert.severity === 'critical'
+              ? 'grid gap-2 rounded-md border-2 border-red-600 bg-red-50 p-4 text-sm text-red-950'
+              : 'grid gap-2 rounded-md border border-amber-400 bg-amber-50 p-4 text-sm text-amber-950'
+          }
         >
-          <p className="font-semibold">Критично: {alert.message}</p>
+          <p className="font-semibold">
+            {alert.severity === 'critical' ? 'Критично: ' : ''}
+            {alert.message}
+          </p>
           <p>
             Пациент:{' '}
             <Link
@@ -86,8 +93,8 @@ export function AlertsCenter() {
             </Link>
           </p>
           <p>{alert.suggestedAction}</p>
-          <p className="text-xs text-red-900">
-            {when.format(new Date(alert.createdAt))}
+          <p className="text-xs opacity-80">
+            {formatDateTime(alert.createdAt)}
             {alert.escalatedFrom ? ' · передано вам как резервному врачу' : ''}
           </p>
           <div>

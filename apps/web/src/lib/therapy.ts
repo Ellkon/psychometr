@@ -1,14 +1,15 @@
-import type { DoseSlot, DrugCatalog, Medication } from '@psychometr/shared';
+import {
+  adverseSeverityLabel,
+  type DoseSlot,
+  type DrugCatalog,
+  type Medication,
+} from '@psychometr/shared';
 
 /** Same windows as the API (apps/api/src/domain/doses.ts): marks up to 1 h early, 48 h late. */
 const MARK_EARLY_MS = 60 * 60 * 1000;
 const MARK_LATE_MS = 48 * 60 * 60 * 1000;
 
-export const severityLabel = {
-  mild: 'Лёгкая',
-  moderate: 'Умеренная',
-  severe: 'Тяжёлая',
-} as const;
+export const severityLabel = adverseSeverityLabel;
 
 export const doseStatusLabel = { taken: 'Принято', skipped: 'Пропущено' } as const;
 
@@ -43,14 +44,44 @@ export function adherenceLabel(medication: Medication): string {
 export interface DrugOption {
   readonly label: string;
   readonly regNumber: string;
-  readonly dosageForms: readonly string[];
+  readonly dosageForm: string;
+  /** Strength of a solid form ("20 мг"), offered as the starting dose; empty otherwise. */
+  readonly strength: string;
+  readonly featured: boolean;
 }
 
-/** One searchable label per registered product: "Сертралин — Золофт® (ЛП-…)". */
+/** "таблетки, покрытые пленочной оболочкой, 20 мг" → "20 мг"; solutions ("5 мг/мл") → "". */
+export function strengthOf(dosageForm: string): string {
+  return /, (\d[\d.,]*\s*(?:мг|мкг|г))$/.exec(dosageForm)?.[1] ?? '';
+}
+
+/**
+ * One searchable label per product and dosage form: "АВИАНДР® (таблетки…, 20 мг) — Маритупирдин".
+ * The INN is dropped when it repeats the trade name; generics that still collide get the
+ * registration number, so each label maps to one product.
+ */
 export function drugOptions(catalog: DrugCatalog): DrugOption[] {
-  return catalog.products.map((product) => ({
-    label: `${product.inn} — ${product.tradeName} (${product.regNumber})`,
-    regNumber: product.regNumber,
-    dosageForms: product.dosageForms,
-  }));
+  const options = catalog.products.flatMap((product) =>
+    product.dosageForms.map((dosageForm) => {
+      const sameName =
+        product.tradeName.replace(/®/g, '').trim().toLowerCase() === product.inn.toLowerCase();
+      return {
+        label: `${product.tradeName} (${dosageForm})${sameName ? '' : ` — ${product.inn}`}`,
+        regNumber: product.regNumber,
+        dosageForm,
+        strength: strengthOf(dosageForm),
+        featured: product.featured,
+      };
+    }),
+  );
+  const counts = new Map<string, number>();
+  for (const option of options) counts.set(option.label, (counts.get(option.label) ?? 0) + 1);
+  const seen = new Set<string>();
+  return options
+    .map((option) =>
+      (counts.get(option.label) ?? 0) > 1
+        ? { ...option, label: `${option.label} · ${option.regNumber}` }
+        : option,
+    )
+    .filter((option) => !seen.has(option.label) && Boolean(seen.add(option.label)));
 }

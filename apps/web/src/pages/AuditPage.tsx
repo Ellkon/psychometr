@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AuditListSchema, AuditVerificationSchema, type AuditAction } from '@psychometr/shared';
 import { sessionClient, useSession } from '../lib/session.js';
 import { AsyncForm, Button, ErrorNotice } from '../components/forms.js';
+import { formatDateTime } from '../lib/dates.js';
 
 const labels = new Map<AuditAction, string>([
   ['staff.created', 'Создание сотрудника'],
@@ -36,6 +37,9 @@ const labels = new Map<AuditAction, string>([
   ['therapy.viewed', 'Просмотр терапии'],
   ['dose.marked', 'Отметка дозы'],
   ['adverse_event.reported', 'Нежелательное явление'],
+  ['contact_request.created', 'Просьба связаться'],
+  ['contact.recorded', 'Запись контакта'],
+  ['contacts.viewed', 'Просмотр контактов'],
   ['registry.viewed', 'Просмотр реестра'],
   ['timeline.viewed', 'Просмотр таймлайна'],
   ['alert.created', 'Алерт создан'],
@@ -113,9 +117,7 @@ export function AuditPage() {
                 {audit.data.events.map((event) => (
                   <tr key={event.sequence} className="border-t border-slate-100">
                     <td className="p-3">{event.sequence}</td>
-                    <td className="whitespace-nowrap p-3">
-                      {new Date(event.occurredAt).toLocaleString('ru-RU')}
-                    </td>
+                    <td className="whitespace-nowrap p-3">{formatDateTime(event.occurredAt)}</td>
                     <td className="p-3">{labels.get(event.action)}</td>
                     <td className="break-all p-3 font-mono text-xs">
                       {event.actorId ?? 'Не определён'}

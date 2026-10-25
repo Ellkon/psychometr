@@ -28,9 +28,11 @@ import { loadRuleEngine, type RuleEngine } from './domain/rules.js';
 import { registerCardRoutes } from './routes/cards.js';
 import { registerScaleRoutes } from './routes/scales.js';
 import { registerTherapyRoutes } from './routes/therapy.js';
+import { registerContactRoutes } from './routes/contacts.js';
 import { loadDrugRegistry } from './domain/drugs.js';
 import { RegistryService } from './domain/registry.js';
 import { TherapyService } from './domain/therapy.js';
+import { ContactService } from './domain/contacts.js';
 import { AlertHub, AlertService } from './domain/alerts.js';
 import { registerAlertRoutes } from './routes/alerts.js';
 import { SecuritySignalService } from './domain/security-signals.js';
@@ -156,9 +158,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerTherapyRoutes(
     app,
     auth,
-    new TherapyService(db, await loadDrugRegistry(findContentDir()), options.clock),
+    new TherapyService(db, await loadDrugRegistry(findContentDir()), options.clock, alerts),
     new RegistryService(db, options.clock),
   );
+  registerContactRoutes(app, auth, new ContactService(db, options.clock, alerts));
   registerAlertRoutes(app, auth, alerts, env.PUBLIC_ORIGIN);
   const signals = new SecuritySignalService(db, options.clock);
   registerSecurityRoutes(app, auth, signals);

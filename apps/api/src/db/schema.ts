@@ -429,9 +429,77 @@ export const adverseEvents = pgTable(
 );
 
 /**
- * Критичный алерт врачу (FR-8). Строка одновременно является transactional outbox: её создают
- * в той же транзакции, что и срабатывание critical-правила. Текст берётся из правила
- * (content/rules). Содержимое неизменно; меняются только таймстемпы переходов и эскалация
+ * Просьба пациента связаться (FR-12). Только выбор из списков, без свободного текста.
+ * Закрывается, когда врач записывает контакт: меняются только resolved_at и contact_id.
+ */
+export const contactRequests = pgTable(
+  'contact_requests',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    patientId: uuid('patient_id')
+      .notNull()
+      .references(() => patients.id, { onDelete: 'restrict' }),
+    /** Client-generated per form fill; makes a retried send idempotent. */
+    submissionId: uuid('submission_id').notNull(),
+    reason: text('reason').$type<'medication' | 'side_effect' | 'worse' | 'other'>().notNull(),
+    preferredTime: text('preferred_time').$type<'morning' | 'day' | 'evening' | 'any'>().notNull(),
+    createdAt: time('created_at').notNull(),
+    resolvedAt: time('resolved_at'),
+    contactId: uuid('contact_id').references((): AnyPgColumn => contacts.id, {
+      onDelete: 'restrict',
+    }),
+  },
+  (table) => [
+    uniqueIndex('contact_requests_submission_idx').on(table.patientId, table.submissionId),
+    // At most one open request per patient: a repeat press is answered with the open one.
+    uniqueIndex('contact_requests_open_idx')
+      .on(table.patientId)
+      .where(sql`${table.resolvedAt} is null`),
+    check(
+      'contact_requests_reason',
+      sql`${table.reason} in ('medication', 'side_effect', 'worse', 'other')`,
+    ),
+    check(
+      'contact_requests_time',
+      sql`${table.preferredTime} in ('morning', 'day', 'evening', 'any')`,
+    ),
+    check(
+      'contact_requests_resolution',
+      sql`(${table.resolvedAt} is null) = (${table.contactId} is null)`,
+    ),
+  ],
+);
+
+/** Контакт врача с пациентом вне приёма или на приёме (FR-12). Append-only. */
+export const contacts = pgTable(
+  'contacts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    patientId: uuid('patient_id')
+      .notNull()
+      .references(() => patients.id, { onDelete: 'restrict' }),
+    practitionerId: uuid('practitioner_id')
+      .notNull()
+      .references(() => practitioners.userId, { onDelete: 'restrict' }),
+    submissionId: uuid('submission_id').notNull(),
+    channel: text('channel').$type<'phone' | 'message' | 'visit'>().notNull(),
+    contactedAt: time('contacted_at').notNull(),
+    note: text('note').notNull(),
+    recordedAt: time('recorded_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('contacts_submission_idx').on(table.practitionerId, table.submissionId),
+    index('contacts_patient_idx').on(table.patientId, table.contactedAt),
+    check('contacts_channel', sql`${table.channel} in ('phone', 'message', 'visit')`),
+    check('contacts_note_length', sql`length(${table.note}) <= 500`),
+  ],
+);
+
+/**
+ * Алерт врачу (FR-8). Строка одновременно является transactional outbox: её создают в той же
+ * транзакции, что и источник. Источник `rule` — срабатывание critical-правила, текст из правила
+ * (content/rules). Источник `adverse_event` — уведомление о НЯ со слов пациента (warning, без
+ * эскалации). Содержимое неизменно; меняются только таймстемпы переходов и эскалация
  * (проверяется триггером).
  */
 export const alerts = pgTable(
@@ -444,11 +512,21 @@ export const alerts = pgTable(
     recipientId: uuid('recipient_id')
       .notNull()
       .references(() => practitioners.userId, { onDelete: 'restrict' }),
-    evaluationId: uuid('evaluation_id')
+    source: text('source')
+      .$type<'rule' | 'adverse_event' | 'contact_request'>()
       .notNull()
-      .references(() => ruleEvaluations.id, { onDelete: 'restrict' }),
-    ruleId: text('rule_id').notNull(),
-    severity: text('severity').notNull(),
+      .default('rule'),
+    evaluationId: uuid('evaluation_id').references(() => ruleEvaluations.id, {
+      onDelete: 'restrict',
+    }),
+    adverseEventId: uuid('adverse_event_id').references(() => adverseEvents.id, {
+      onDelete: 'restrict',
+    }),
+    contactRequestId: uuid('contact_request_id').references(() => contactRequests.id, {
+      onDelete: 'restrict',
+    }),
+    ruleId: text('rule_id'),
+    severity: text('severity').$type<'critical' | 'warning'>().notNull(),
     message: text('message').notNull(),
     suggestedAction: text('suggested_action').notNull(),
     status: text('status').$type<'pending' | 'sent' | 'delivered' | 'acknowledged'>().notNull(),
@@ -473,7 +551,12 @@ export const alerts = pgTable(
       'alerts_status_valid',
       sql`${table.status} in ('pending', 'sent', 'delivered', 'acknowledged')`,
     ),
-    check('alerts_severity_valid', sql`${table.severity} = 'critical'`),
+    check(
+      'alerts_source_valid',
+      sql`(${table.source} = 'rule' and ${table.severity} = 'critical' and ${table.evaluationId} is not null and ${table.ruleId} is not null and ${table.adverseEventId} is null and ${table.contactRequestId} is null)
+        or (${table.source} = 'adverse_event' and ${table.severity} = 'warning' and ${table.adverseEventId} is not null and ${table.evaluationId} is null and ${table.ruleId} is null and ${table.contactRequestId} is null and ${table.escalateAt} is null and ${table.escalationOf} is null)
+        or (${table.source} = 'contact_request' and ${table.severity} = 'warning' and ${table.contactRequestId} is not null and ${table.evaluationId} is null and ${table.ruleId} is null and ${table.adverseEventId} is null)`,
+    ),
   ],
 );
 

@@ -3,17 +3,27 @@ import { IdSchema } from './access.js';
 import { RuleIdSchema } from './rules.js';
 
 /**
- * Critical alerts (FR-8): one per firing of a `critical` rule from content/rules
- * (PHQ-9 item 9 > 0 today). The text is the rule's message and suggested action.
+ * Doctor alerts (FR-8). Two sources:
+ * - `rule`: one per firing of a `critical` rule from content/rules (PHQ-9 item 9 > 0 today).
+ *   The text is the rule's message and suggested action. Escalated after ESCALATION_MINUTES.
+ * - `adverse_event`: a notification that the patient reported an adverse event (FR-6). Severity
+ *   `warning`, never escalated. Owner decision of 2026-10-25: notify only, no clinical threshold;
+ *   behaviour graded by severity needs a clinical source (docs/TZ.md, section 12).
+ * - `contact_request`: the patient asked the doctor to get in touch (FR-12). `warning`, never
+ *   escalated; closed when the doctor records a contact.
  */
 export const AlertStatusSchema = z.enum(['pending', 'sent', 'delivered', 'acknowledged']);
 export type AlertStatus = z.infer<typeof AlertStatusSchema>;
+export const AlertSourceSchema = z.enum(['rule', 'adverse_event', 'contact_request']);
+export type AlertSource = z.infer<typeof AlertSourceSchema>;
 
 export const AlertSchema = z
   .object({
     id: IdSchema,
-    ruleId: RuleIdSchema,
-    severity: z.literal('critical'),
+    source: AlertSourceSchema,
+    /** Null for an adverse event notification. */
+    ruleId: RuleIdSchema.nullable(),
+    severity: z.enum(['critical', 'warning']),
     patientId: IdSchema,
     patientName: z.string(),
     message: z.string(),

@@ -281,6 +281,9 @@ function RegistryTable({ rows }: { rows: readonly RegistryRow[] }) {
                   </span>
                 )}
                 {row.safetySignal && <span className="text-red-800">Пункт 9 больше 0</span>}
+                {row.openContactRequests > 0 && (
+                  <span className="text-amber-800">Просит связаться</span>
+                )}
                 {row.adverseEventsSinceReview > 0 && (
                   <span className="text-amber-800">Новые НЯ: {row.adverseEventsSinceReview}</span>
                 )}

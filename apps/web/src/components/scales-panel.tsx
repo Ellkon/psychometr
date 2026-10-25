@@ -22,12 +22,10 @@ import { DEFAULT_SCHEDULE, chartPoints, scheduleStatusLabel } from '../lib/scale
 import { AsyncForm, ErrorNotice, Field, text } from './forms.js';
 import { Card, CardContent, CardHeader } from './ui/card.js';
 import { EmergencyInstruction } from './emergency-instruction.js';
+import { formatDate, formatDateTime } from '../lib/dates.js';
 
 type Schedule = PatientScales['schedules'][number];
 type HistoryRow = PatientScales['history'][number];
-
-const dateFormat = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium' });
-const dateTimeFormat = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
 export function ScalesPanel({ patientId }: { patientId: string }) {
   const { user } = useSession();
@@ -73,8 +71,7 @@ function PatientScalesView({ patientId, data }: { patientId: string; data: Patie
               <div className="grid gap-1 text-sm">
                 <p className="font-medium text-slate-900">{schedule.title}</p>
                 <p className="text-slate-600">
-                  {scheduleStatusLabel[schedule.status]} · срок до{' '}
-                  {dateFormat.format(new Date(schedule.dueAt))}
+                  {scheduleStatusLabel[schedule.status]} · срок до {formatDate(schedule.dueAt)}
                 </p>
               </div>
               {schedule.active ? (
@@ -197,16 +194,13 @@ function ScheduleList({ schedules }: { schedules: Schedule[] }) {
         >
           <span className="font-medium">{schedule.title}</span>
           <span>
-            {scheduleStatusLabel[schedule.status]} · срок{' '}
-            {dateFormat.format(new Date(schedule.dueAt))}
+            {scheduleStatusLabel[schedule.status]} · срок {formatDate(schedule.dueAt)}
             {' · '}
             каждые {schedule.intervalDays} дн., окно {schedule.windowDays} дн.
           </span>
           <span className="text-slate-600">
             Последний ответ:{' '}
-            {schedule.lastAnsweredAt
-              ? dateTimeFormat.format(new Date(schedule.lastAnsweredAt))
-              : 'не было'}
+            {schedule.lastAnsweredAt ? formatDateTime(schedule.lastAnsweredAt) : 'не было'}
           </span>
         </li>
       ))}
@@ -356,7 +350,7 @@ function HistoryTable({ rows, showSafety }: { rows: HistoryRow[]; showSafety: bo
             .sort((a, b) => Date.parse(b.answeredAt) - Date.parse(a.answeredAt))
             .map((row) => (
               <tr key={row.responseId} className="border-b border-slate-200">
-                <td className="py-2 pr-3">{dateTimeFormat.format(new Date(row.answeredAt))}</td>
+                <td className="py-2 pr-3">{formatDateTime(row.answeredAt)}</td>
                 <td className="py-2 pr-3">{row.scaleTitle}</td>
                 <td className="py-2 pr-3">
                   {row.score} из {row.maxScore}

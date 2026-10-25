@@ -8,6 +8,7 @@ import {
 
 const alert = {
   id: '0b8f6c2e-3d1a-4e5b-9c7d-2a1b3c4d5e6f',
+  source: 'rule',
   ruleId: 'phq9_item9_positive',
   severity: 'critical',
   patientId: '1f2e3d4c-5b6a-4789-8abc-def012345678',

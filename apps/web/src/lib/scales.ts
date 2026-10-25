@@ -4,6 +4,7 @@ import type {
   ScaleScheduleInput,
   ScaleSubmission,
 } from '@psychometr/shared';
+import { formatDate } from './dates.js';
 
 /** Default schedule from FR-3.4: every two weeks, seven-day completion window. */
 export const DEFAULT_SCHEDULE: ScaleScheduleInput = {
@@ -62,7 +63,7 @@ export function chartPoints(history: PatientScales['history'], scaleId: string):
     .map((row) => ({
       time: Date.parse(row.answeredAt),
       score: row.score,
-      label: new Date(row.answeredAt).toLocaleDateString('ru-RU'),
+      label: formatDate(row.answeredAt),
     }))
     .sort((a, b) => a.time - b.time);
 }

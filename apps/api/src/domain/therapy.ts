@@ -14,6 +14,7 @@ import type { Database, Transaction } from '../db/client.js';
 import { adverseEvents, doseLog, medicationRequests } from '../db/schema.js';
 import { appendAudit } from './audit.js';
 import { assertCanAccessPatient, assertRole, authorized } from './access.js';
+import type { AlertService } from './alerts.js';
 import type { DrugRegistry } from './drugs.js';
 import {
   ADHERENCE_DAYS,
@@ -66,6 +67,8 @@ export class TherapyService {
     private readonly db: Database,
     private readonly drugs: DrugRegistry,
     private readonly now: () => Date = () => new Date(),
+    /** Notifies the doctor of each adverse event report (FR-6). Optional in unit tests. */
+    private readonly alerts?: AlertService,
   ) {}
 
   catalog(user: Principal) {
@@ -300,6 +303,7 @@ export class TherapyService {
           },
           now,
         );
+        await this.alerts?.raiseAdverseEvent(tx, patientId, row.id, input.severity, now);
         return { id: row.id };
       },
       patientId,

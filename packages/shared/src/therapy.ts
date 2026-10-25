@@ -4,6 +4,7 @@
  */
 import { z } from 'zod';
 import { IdSchema } from './access.js';
+import { ContactChannelSchema, ContactReasonSchema, ContactTimeSchema } from './contacts.js';
 import { ScaleIdSchema } from './scales.js';
 
 export const DoseTimeSchema = z
@@ -59,6 +60,13 @@ export const DoseMarkInputSchema = z
 export type DoseMarkInput = z.infer<typeof DoseMarkInputSchema>;
 
 export const AdverseSeveritySchema = z.enum(['mild', 'moderate', 'severe']);
+export type AdverseSeverity = z.infer<typeof AdverseSeveritySchema>;
+/** Severity as the patient rated it; shared by the forms and the doctor's notification. */
+export const adverseSeverityLabel = {
+  mild: 'Лёгкая',
+  moderate: 'Умеренная',
+  severe: 'Тяжёлая',
+} as const satisfies Record<AdverseSeverity, string>;
 export const AdverseEventInputSchema = z
   .object({
     /** Client-generated per form fill: a retried send stores one record. */
@@ -140,7 +148,10 @@ export const RegistryRowSchema = z.object({
   ),
   safetySignal: z.boolean(),
   lastActivityAt: z.iso.datetime().nullable(),
+  /** Weeks since the latest patient activity or contact recorded by a doctor (FR-12). */
   weeksWithoutContact: z.number().int().min(0).nullable(),
+  /** Patient asked to be contacted and no contact has been recorded since (FR-12). */
+  openContactRequests: z.number().int().min(0),
   /** Assigned scales whose completion window is open or missed. */
   dueScales: z.number().int().min(0),
   activeMedications: z.number().int().min(0),
@@ -194,8 +205,23 @@ export const TimelineEventSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     ...TimelineBase,
+    kind: z.literal('contact_request'),
+    reason: ContactReasonSchema,
+    preferredTime: ContactTimeSchema,
+    resolvedAt: z.iso.datetime().nullable(),
+  }),
+  z.object({
+    ...TimelineBase,
+    kind: z.literal('contact'),
+    channel: ContactChannelSchema,
+    note: z.string(),
+  }),
+  z.object({
+    ...TimelineBase,
     kind: z.literal('alert'),
-    ruleId: z.string(),
+    /** What raised the alert: a critical rule, an adverse event report or a contact request. */
+    source: z.enum(['rule', 'adverse_event', 'contact_request']),
+    ruleId: z.string().nullable(),
     message: z.string(),
     status: z.enum(['pending', 'sent', 'delivered', 'acknowledged']),
     acknowledgedAt: z.iso.datetime().nullable(),

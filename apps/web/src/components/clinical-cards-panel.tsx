@@ -10,6 +10,7 @@ import { sessionClient } from '../lib/session.js';
 import { FACT_LABEL, formatFact } from '../lib/cards.js';
 import { Card, CardContent, CardHeader } from './ui/card.js';
 import { Button, ErrorNotice } from './forms.js';
+import { formatDateTime } from '../lib/dates.js';
 
 const SEVERITY_LABEL: Record<ClinicalCard['severity'], string> = {
   info: 'Информация',
@@ -130,7 +131,7 @@ function CardView({ card, patientId }: { card: ClinicalCard; patientId: string }
       </p>
       <p className="text-xs text-slate-500">
         Источник: {card.sourceId}, {card.sourceLocation}. Версия правила {card.ruleVersion}.
-        Срабатывание: {new Date(card.triggeredAt).toLocaleString('ru-RU')}.
+        Срабатывание: {formatDateTime(card.triggeredAt)}.
       </p>
       <dl className="grid gap-1 text-xs sm:grid-cols-2">
         {Object.entries(card.facts).map(([key, value]) => (

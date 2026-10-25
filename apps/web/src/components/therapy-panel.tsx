@@ -27,8 +27,8 @@ import {
 } from '../lib/outbox.js';
 import { AsyncForm, Button, ErrorNotice, Field, text } from './forms.js';
 import { Card, CardContent, CardHeader } from './ui/card.js';
+import { formatDate } from '../lib/dates.js';
 
-const dateFormat = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium' });
 const slotFormat = new Intl.DateTimeFormat('ru-RU', {
   weekday: 'short',
   day: 'numeric',
@@ -102,8 +102,8 @@ function MedicationItem({ patientId, medication }: { patientId: string; medicati
         </p>
         <span className="text-xs text-slate-500">
           {medication.status === 'active' ? 'Действует' : 'Остановлено'} · с{' '}
-          {dateFormat.format(new Date(medication.startsOn))}
-          {medication.endsOn ? ` по ${dateFormat.format(new Date(medication.endsOn))}` : ''}
+          {formatDate(medication.startsOn)}
+          {medication.endsOn ? ` по ${formatDate(medication.endsOn)}` : ''}
         </span>
       </div>
       <p className="text-slate-600">
@@ -145,6 +145,7 @@ function PrescriptionForm({ patientId }: { patientId: string }) {
   });
   const options = drugs.data ? drugOptions(drugs.data) : [];
   const [drug, setDrug] = useState('');
+  const [dose, setDose] = useState('');
   const selected = options.find((option) => option.label === drug);
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return (
@@ -159,7 +160,7 @@ function PrescriptionForm({ patientId }: { patientId: string }) {
             body: {
               grlsRegNumber: selected?.regNumber ?? null,
               drugText: drug.trim(),
-              doseText: text(data, 'doseText').trim(),
+              doseText: dose.trim(),
               doseTimes: parseDoseTimes(text(data, 'doseTimes')),
               timeZone,
               startsOn: text(data, 'startsOn'),
@@ -167,33 +168,45 @@ function PrescriptionForm({ patientId }: { patientId: string }) {
             },
           });
           setDrug('');
+          setDose('');
           await queryClient.invalidateQueries({ queryKey: ['therapy'] });
         }}
       >
         <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-          <span>Препарат: выберите из ГРЛС или введите текстом</span>
+          <span>Препарат: выберите из списка ГРЛС или введите текстом</span>
           <input
             name="drug"
             list={`drugs-${patientId}`}
             required
             maxLength={300}
             value={drug}
+            onClick={(event) => {
+              // Open the list on click, with the featured product (АВИАНДР®) on top.
+              try {
+                event.currentTarget.showPicker();
+              } catch {
+                // Older browsers: the list opens on typing or the down arrow.
+              }
+            }}
             onChange={(event) => {
               setDrug(event.target.value);
+              // Picking a product form fills its strength; the doctor can change it.
+              const picked = options.find((option) => option.label === event.target.value);
+              if (picked?.strength) setDose(picked.strength);
             }}
             className={fieldClass}
             autoComplete="off"
           />
           <datalist id={`drugs-${patientId}`}>
             {options.map((option) => (
-              <option key={option.regNumber} value={option.label} />
+              <option key={option.label} value={option.label} />
             ))}
           </datalist>
           <span className="text-xs font-normal text-slate-500">
             {selected
               ? `Из ГРЛС, рег. № ${selected.regNumber}`
               : drugs.data
-                ? `Справочник ГРЛС от ${dateFormat.format(new Date(drugs.data.exportDate))}; без выбора — свободный текст`
+                ? `Справочник ГРЛС от ${formatDate(drugs.data.exportDate)}; без выбора — свободный текст`
                 : 'Справочник ГРЛС загружается…'}
           </span>
         </label>
@@ -201,17 +214,20 @@ function PrescriptionForm({ patientId }: { patientId: string }) {
           <span>Доза на приём</span>
           <input
             name="doseText"
-            list={`forms-${patientId}`}
             required
             maxLength={100}
+            value={dose}
+            onChange={(event) => {
+              setDose(event.target.value);
+            }}
             className={fieldClass}
             autoComplete="off"
           />
-          <datalist id={`forms-${patientId}`}>
-            {selected?.dosageForms.map((form) => (
-              <option key={form} value={form} />
-            ))}
-          </datalist>
+          {selected?.strength && (
+            <span className="text-xs font-normal text-slate-500">
+              Подставлена дозировка формы выпуска. Проверьте дозу на приём.
+            </span>
+          )}
         </label>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field
@@ -248,7 +264,7 @@ function AdverseEventList({
           {events.map((event) => (
             <li key={event.id} className="rounded-md border border-slate-200 p-3">
               <p className="font-medium">
-                {severityLabel[event.severity]} · с {dateFormat.format(new Date(event.startedOn))}
+                {severityLabel[event.severity]} · с {formatDate(event.startedOn)}
                 {event.medicationRequestId
                   ? ` · ${drugName.get(event.medicationRequestId) ?? 'назначение'}`
                   : ''}

@@ -4,6 +4,7 @@ import {
   adherenceLabel,
   dosesToMark,
   drugOptions,
+  strengthOf,
   markableSlots,
   parseDoseTimes,
 } from './therapy.js';
@@ -54,14 +55,43 @@ describe('therapy helpers', () => {
     ).toBe('Пока нет прошедших доз');
   });
 
-  it('labels drug options with INN, trade name and registration number', () => {
+  it('labels one option per dosage form, with the form in brackets and the INN after', () => {
+    const options = drugOptions({
+      exportDate: '2026-10-23',
+      products: [
+        {
+          regNumber: 'ЛП-1',
+          tradeName: 'Золофт®',
+          inn: 'Сертралин',
+          dosageForms: ['таблетки, покрытые пленочной оболочкой, 50 мг', 'таблетки, 100 мг'],
+          featured: false,
+        },
+      ],
+    });
+    expect(options.map((option) => [option.label, option.strength])).toEqual([
+      ['Золофт® (таблетки, покрытые пленочной оболочкой, 50 мг) — Сертралин', '50 мг'],
+      ['Золофт® (таблетки, 100 мг) — Сертралин', '100 мг'],
+    ]);
+  });
+
+  it('drops a repeated INN and tells colliding generics apart by registration number', () => {
+    const generic = (regNumber: string) => ({
+      regNumber,
+      tradeName: 'Агомелатин',
+      inn: 'Агомелатин',
+      dosageForms: ['таблетки, 25 мг'],
+      featured: false,
+    });
     expect(
-      drugOptions({
-        exportDate: '2026-10-23',
-        products: [
-          { regNumber: 'ЛП-1', tradeName: 'Золофт®', inn: 'Сертралин', dosageForms: ['таблетки'], featured: false },
-        ],
-      })[0]?.label,
-    ).toBe('Сертралин — Золофт® (ЛП-1)');
+      drugOptions({ exportDate: '2026-10-23', products: [generic('ЛП-1'), generic('ЛП-2')] }).map(
+        (option) => option.label,
+      ),
+    ).toEqual(['Агомелатин (таблетки, 25 мг) · ЛП-1', 'Агомелатин (таблетки, 25 мг) · ЛП-2']);
+  });
+
+  it('offers a starting dose only for solid forms, not for concentrations', () => {
+    expect(strengthOf('таблетки, покрытые пленочной оболочкой, 20 мг')).toBe('20 мг');
+    expect(strengthOf('раствор для внутримышечного введения, 5 мг/мл, 5 мл')).toBe('');
+    expect(strengthOf('- Без рецепта')).toBe('');
   });
 });

@@ -14,9 +14,11 @@ import { Card, CardContent, CardHeader } from '../components/ui/card.js';
 import { AsyncForm, Button, ErrorNotice, Field } from '../components/forms.js';
 import { IdentityForm } from '../components/identity-form.js';
 import { ScalesPanel } from '../components/scales-panel.js';
+import { ContactsPanel } from '../components/contacts-panel.js';
 import { ClinicalCardsPanel } from '../components/clinical-cards-panel.js';
 import { TherapyPanel } from '../components/therapy-panel.js';
 import { TimelinePanel } from '../components/timeline-panel.js';
+import { formatDateTime } from '../lib/dates.js';
 
 const inviteStatus = (status: string) => {
   switch (status) {
@@ -105,6 +107,7 @@ export function PatientPage() {
       </Card>
       {(user.role === 'doctor' || user.role === 'patient') && <TherapyPanel patientId={id} />}
       {(user.role === 'doctor' || user.role === 'patient') && <ScalesPanel patientId={id} />}
+      {(user.role === 'doctor' || user.role === 'patient') && <ContactsPanel patientId={id} />}
       {user.role === 'doctor' && <ClinicalCardsPanel patientId={id} />}
       {user.role === 'doctor' && <TimelinePanel patientId={id} />}
       {user.role === 'doctor' && <Invitations key={id} patientId={id} />}
@@ -174,9 +177,7 @@ function Invitations({ patientId }: { patientId: string }) {
                 className="flex flex-wrap justify-between gap-2 rounded-md bg-slate-50 p-3"
               >
                 <span>{inviteStatus(invite.status)}</span>
-                <span className="text-slate-500">
-                  До {new Date(invite.expiresAt).toLocaleString('ru-RU')}
-                </span>
+                <span className="text-slate-500">До {formatDateTime(invite.expiresAt)}</span>
               </li>
             ))}
           </ul>

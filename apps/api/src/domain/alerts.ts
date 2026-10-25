@@ -1,6 +1,10 @@
 /**
- * Critical alerts (FR-8): transactional outbox in PostgreSQL, delivery over WebSocket,
+ * Doctor alerts (FR-8): transactional outbox in PostgreSQL, delivery over WebSocket,
  * acknowledgement by the recipient, and escalation to a reserve doctor (FR-8.3).
+ *
+ * Adverse event notifications (FR-6) and contact requests (FR-12) share the outbox and delivery: severity `warning`, written
+ * in the report's transaction, never escalated. They carry no clinical rule: the owner decided on
+ * 2026-10-25 to notify the doctor of every report; grading by severity needs a clinical source.
  *
  * An alert is raised for every firing of a `critical` rule (content/rules), in the same transaction
  * as the rule evaluation and the answer that caused it, so an alert cannot exist without its source
@@ -13,7 +17,20 @@
  * the state, so only the wake-up path would change.
  */
 import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
-import { ESCALATION_MINUTES, type Alert, type Principal, type Rule } from '@psychometr/shared';
+import {
+  CONTACT_RESPONSE_WORKING_DAYS,
+  ESCALATION_MINUTES,
+  addWorkingDays,
+  adverseSeverityLabel,
+  contactReasonLabel,
+  contactTimeLabel,
+  type AdverseSeverity,
+  type ContactReason,
+  type ContactTime,
+  type Alert,
+  type Principal,
+  type Rule,
+} from '@psychometr/shared';
 import type { Database, Transaction } from '../db/client.js';
 import { alerts, careTeam, patientIdentity } from '../db/schema.js';
 import type { IdentityVault } from '../security/identity.js';
@@ -91,6 +108,21 @@ export class AlertHub {
   }
 }
 
+/**
+ * First doctor of the care team. Every patient is created with one, so a missing doctor is a
+ * broken invariant: fail loudly, a signal must never be dropped silently.
+ */
+async function primaryRecipient(tx: Transaction, patientId: string): Promise<string> {
+  const [primary] = await tx
+    .select({ id: careTeam.practitionerId })
+    .from(careTeam)
+    .where(eq(careTeam.patientId, patientId))
+    .orderBy(asc(careTeam.assignedAt), asc(careTeam.practitionerId))
+    .limit(1);
+  if (!primary) throw new Error('Alert recipient missing: patient has no care team');
+  return primary.id;
+}
+
 /** Reserve recipient: the next care-team member in assignment order, never the current recipient. */
 export function pickReserve(careTeamInOrder: readonly string[], current: string): string | null {
   return careTeamInOrder.find((id) => id !== current) ?? null;
@@ -128,27 +160,20 @@ export class AlertService {
     now: Date,
   ): Promise<void> {
     if (rule.severity !== 'critical') return;
-    const [primary] = await tx
-      .select({ id: careTeam.practitionerId })
-      .from(careTeam)
-      .where(eq(careTeam.patientId, patientId))
-      .orderBy(asc(careTeam.assignedAt), asc(careTeam.practitionerId))
-      .limit(1);
-    // Every patient is created with a care-team doctor, so this is an invariant. Fail loudly:
-    // a safety signal must never be dropped silently.
-    if (!primary) throw new Error('Alert recipient missing: patient has no care team');
+    const primary = await primaryRecipient(tx, patientId);
     const inserted = await tx
       .insert(alerts)
       .values({
         patientId,
-        recipientId: primary.id,
+        recipientId: primary,
+        source: 'rule',
         evaluationId,
         ruleId: rule.id,
         severity: 'critical',
         message: rule.message,
         suggestedAction: rule.suggested_action,
         status: 'pending',
-        idempotencyKey: `${evaluationId}:${primary.id}`,
+        idempotencyKey: `${evaluationId}:${primary}`,
         createdAt: now,
         escalateAt: new Date(now.getTime() + ESCALATION_MS),
       })
@@ -162,7 +187,133 @@ export class AlertService {
       );
   }
 
-  /** Doctor's open alerts (not yet acknowledged), newest first. */
+  /**
+   * Called inside the transaction that stores the patient's adverse event report. The text is
+   * fixed and names only the patient's own severity rating; the description stays in the record.
+   */
+  async raiseAdverseEvent(
+    tx: Transaction,
+    patientId: string,
+    adverseEventId: string,
+    severity: AdverseSeverity,
+    now: Date,
+  ): Promise<void> {
+    // eslint-disable-next-line security/detect-object-injection -- severity is a zod enum value
+    const label = adverseSeverityLabel[severity].toLowerCase();
+    await this.raiseNotice(tx, patientId, now, {
+      source: 'adverse_event',
+      adverseEventId,
+      message: `Пациент сообщил о нежелательном явлении. Тяжесть по оценке пациента: ${label}.`,
+      suggestedAction: 'Просмотреть запись в карте пациента.',
+      idempotencyKey: `adverse_event:${adverseEventId}`,
+    });
+  }
+
+  /** Called inside the transaction that stores the patient's contact request (FR-12). */
+  async raiseContactRequest(
+    tx: Transaction,
+    patientId: string,
+    contactRequestId: string,
+    reason: ContactReason,
+    preferredTime: ContactTime,
+    now: Date,
+  ): Promise<void> {
+    // eslint-disable-next-line security/detect-object-injection -- zod enum values
+    const why = `${contactReasonLabel[reason]}. Удобное время: ${contactTimeLabel[preferredTime].toLowerCase()}.`;
+    await this.raiseNotice(tx, patientId, now, {
+      source: 'contact_request',
+      contactRequestId,
+      message: `Пациент просит связаться. ${why}`,
+      suggestedAction: 'Связаться с пациентом и записать контакт в карте.',
+      idempotencyKey: `contact_request:${contactRequestId}`,
+      // Not answered in time: the reserve doctor gets a copy (FR-8.3 mechanism).
+      escalateAt: addWorkingDays(now, CONTACT_RESPONSE_WORKING_DAYS),
+    });
+  }
+
+  /**
+   * Closes the open contact-request notifications of a patient once a doctor has recorded a
+   * contact (FR-12). Runs in the contact's transaction; the acknowledging doctor is audited.
+   */
+  async acknowledgeContactRequests(
+    tx: Transaction,
+    user: Principal,
+    patientId: string,
+    requestIds: readonly string[],
+    now: Date,
+  ): Promise<void> {
+    if (requestIds.length === 0) return;
+    const closed = await tx
+      .update(alerts)
+      .set({ status: 'acknowledged', acknowledgedAt: now, acknowledgedBy: user.id })
+      .where(
+        and(
+          eq(alerts.patientId, patientId),
+          inArray(alerts.contactRequestId, [...requestIds]),
+          isNull(alerts.acknowledgedAt),
+        ),
+      )
+      .returning({ id: alerts.id });
+    // One record per closed alert, as for a manual acknowledgement.
+    for (let i = 0; i < closed.length; i++)
+      await appendAudit(
+        tx,
+        {
+          action: 'alert.acknowledged',
+          actorId: user.id,
+          resourceId: patientId,
+          detail: 'contact_request',
+        },
+        now,
+      );
+  }
+
+  /** A quiet notification (`warning`) for the patient's primary doctor. */
+  private async raiseNotice(
+    tx: Transaction,
+    patientId: string,
+    now: Date,
+    notice: {
+      source: 'adverse_event' | 'contact_request';
+      adverseEventId?: string;
+      contactRequestId?: string;
+      message: string;
+      suggestedAction: string;
+      idempotencyKey: string;
+      escalateAt?: Date;
+    },
+  ): Promise<void> {
+    const primary = await primaryRecipient(tx, patientId);
+    const inserted = await tx
+      .insert(alerts)
+      .values({
+        patientId,
+        recipientId: primary,
+        source: notice.source,
+        adverseEventId: notice.adverseEventId ?? null,
+        contactRequestId: notice.contactRequestId ?? null,
+        severity: 'warning',
+        message: notice.message,
+        suggestedAction: notice.suggestedAction,
+        status: 'pending',
+        idempotencyKey: `${notice.idempotencyKey}:${primary}`,
+        createdAt: now,
+        escalateAt: notice.escalateAt ?? null,
+      })
+      .onConflictDoNothing({ target: alerts.idempotencyKey })
+      .returning({ id: alerts.id });
+    if (inserted.length > 0)
+      await appendAudit(
+        tx,
+        { action: 'alert.created', resourceId: patientId, detail: notice.source },
+        now,
+      );
+  }
+
+  /**
+   * Doctor's open alerts (not yet acknowledged): critical first, then newest first, so a pile of
+   * adverse event notifications can never push a critical alert out of the page.
+   */
   async list(user: Principal): Promise<{ alerts: Alert[] }> {
     return authorized(this.db, user, async (tx) => {
       assertRole(user, 'doctor');
@@ -170,7 +321,7 @@ export class AlertService {
         .select()
         .from(alerts)
         .where(and(eq(alerts.recipientId, user.id), isNull(alerts.acknowledgedAt), stillAssigned))
-        .orderBy(desc(alerts.createdAt))
+        .orderBy(desc(sql`${alerts.severity} = 'critical'`), desc(alerts.createdAt))
         .limit(100);
       const views = await this.views(tx, rows);
       await appendAudit(tx, { action: 'alerts.viewed', actorId: user.id }, this.now());
@@ -203,7 +354,7 @@ export class AlertService {
           action: 'alert.acknowledged',
           actorId: user.id,
           resourceId: row.patientId,
-          detail: row.ruleId,
+          detail: row.ruleId ?? row.source,
         },
         now,
       );
@@ -329,7 +480,10 @@ export class AlertService {
             .values({
               patientId: locked.patientId,
               recipientId: reserve,
+              source: locked.source,
               evaluationId: locked.evaluationId,
+              adverseEventId: locked.adverseEventId,
+              contactRequestId: locked.contactRequestId,
               ruleId: locked.ruleId,
               severity: locked.severity,
               message: locked.message,
@@ -346,7 +500,11 @@ export class AlertService {
             .where(eq(alerts.id, locked.id));
           await appendAudit(
             tx,
-            { action: 'alert.escalated', resourceId: locked.patientId, detail: locked.ruleId },
+            {
+              action: 'alert.escalated',
+              resourceId: locked.patientId,
+              detail: locked.ruleId ?? locked.source,
+            },
             now,
           );
         } else {
@@ -356,7 +514,7 @@ export class AlertService {
             {
               action: 'alert.escalation_unavailable',
               resourceId: locked.patientId,
-              detail: locked.ruleId,
+              detail: locked.ruleId ?? locked.source,
             },
             now,
           );
@@ -456,8 +614,9 @@ export class AlertService {
       if (patientName === undefined) throw new Error('Patient identity missing');
       return {
         id: row.id,
+        source: row.source,
         ruleId: row.ruleId,
-        severity: 'critical' as const,
+        severity: row.severity,
         patientId: row.patientId,
         patientName,
         message: row.message,

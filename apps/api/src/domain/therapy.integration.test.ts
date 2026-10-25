@@ -315,12 +315,18 @@ describe('registry and timeline', () => {
       activeMedications: 1,
       missedDosesInRow: 2,
       adverseEventsSinceReview: 1,
+      // The report's notification is shown as a new adverse event, not as an open critical alert.
+      openAlerts: 0,
       reviewed: false,
       weeksWithoutContact: 0,
     });
     const timeline = await f.request('GET', `${base(f.patientId)}/timeline`, doctor);
     const events = TimelineSchema.parse(timeline.json<unknown>()).events;
-    expect(events.map((event) => event.kind)).toEqual(['adverse_event', 'medication_started']);
+    expect(events.map((event) => event.kind)).toEqual([
+      'adverse_event',
+      'alert',
+      'medication_started',
+    ]);
     expect(await registry()).toMatchObject({ reviewed: true, adverseEventsSinceReview: 0 });
     const audit = await f.db.select().from(auditEvents).orderBy(asc(auditEvents.sequence));
     expect(verifyAuditChain(audit)).toBe(true);

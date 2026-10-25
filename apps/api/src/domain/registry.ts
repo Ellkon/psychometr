@@ -8,6 +8,8 @@ import type { Database, Transaction } from '../db/client.js';
 import {
   adverseEvents,
   alerts,
+  contactRequests,
+  contacts,
   auditEvents,
   careTeam,
   doseLog,
@@ -158,6 +160,17 @@ export class RegistryService {
       doseActivity?.last,
       adverseActivity?.last,
     );
+    // A doctor's recorded contact counts as contact (FR-12), but not as patient activity:
+    // it must not mark the patient "not reviewed".
+    const [doctorContact] = await tx
+      .select({ last: max(contacts.contactedAt) })
+      .from(contacts)
+      .where(eq(contacts.patientId, patientId));
+    const lastContact = latest(lastActivity, doctorContact?.last);
+    const [openRequests] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(contactRequests)
+      .where(and(eq(contactRequests.patientId, patientId), isNull(contactRequests.resolvedAt)));
 
     const [review] = await tx
       .select({ last: max(auditEvents.occurredAt) })
@@ -186,6 +199,8 @@ export class RegistryService {
         and(
           eq(alerts.patientId, patientId),
           eq(alerts.recipientId, user.id),
+          // Adverse event notifications are counted as "new adverse events" above, not twice.
+          eq(alerts.severity, 'critical'),
           isNull(alerts.acknowledgedAt),
         ),
       );
@@ -197,9 +212,10 @@ export class RegistryService {
       safetySignal: lastPhq9?.safetySignal ?? false,
       lastActivityAt: lastActivity?.toISOString() ?? null,
       // A concurrent mark can be newer than `now` taken at the start of this read: never negative.
-      weeksWithoutContact: lastActivity
-        ? Math.max(0, Math.floor((now.getTime() - lastActivity.getTime()) / WEEK_MS))
+      weeksWithoutContact: lastContact
+        ? Math.max(0, Math.floor((now.getTime() - lastContact.getTime()) / WEEK_MS))
         : null,
+      openContactRequests: openRequests?.count ?? 0,
       dueScales,
       activeMedications: active.length,
       missedDosesInRow,
@@ -292,6 +308,31 @@ export class RegistryService {
             severity: row.severity as 'info' | 'warning' | 'critical',
             message: row.message,
           });
+        for (const row of await tx
+          .select()
+          .from(contactRequests)
+          .where(eq(contactRequests.patientId, patientId))
+          .orderBy(desc(contactRequests.createdAt))
+          .limit(TIMELINE_LIMIT))
+          events.push({
+            at: row.createdAt.toISOString(),
+            kind: 'contact_request',
+            reason: row.reason,
+            preferredTime: row.preferredTime,
+            resolvedAt: row.resolvedAt?.toISOString() ?? null,
+          });
+        for (const row of await tx
+          .select()
+          .from(contacts)
+          .where(eq(contacts.patientId, patientId))
+          .orderBy(desc(contacts.contactedAt))
+          .limit(TIMELINE_LIMIT))
+          events.push({
+            at: row.contactedAt.toISOString(),
+            kind: 'contact',
+            channel: row.channel,
+            note: row.note,
+          });
         // All alerts of the patient, including those sent to another doctor of the care team.
         for (const row of await tx
           .select()
@@ -302,6 +343,7 @@ export class RegistryService {
           events.push({
             at: row.createdAt.toISOString(),
             kind: 'alert',
+            source: row.source,
             ruleId: row.ruleId,
             message: row.message,
             status: row.status,
