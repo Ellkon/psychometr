@@ -1,6 +1,7 @@
 import { Link, Outlet, useNavigate } from '@tanstack/react-router';
 import { Button, ErrorNotice } from './components/forms.js';
 import { useSession } from './lib/session.js';
+import { AlertsCenter } from './components/alerts-center.js';
 
 export function AppShell() {
   const { user, logout, privacyError } = useSession(),
@@ -65,18 +66,15 @@ export function AppShell() {
       </header>
       <main key={user?.id ?? 'anonymous'} className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
         <ErrorNotice message={privacyError} />
+        {user?.role === 'doctor' && <AlertsCenter />}
         <Outlet />
       </main>
       <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-3 px-4 py-4 text-xs leading-relaxed text-slate-500">
+        <div className="mx-auto max-w-6xl px-4 py-4 text-xs leading-relaxed text-slate-500">
           <p>
             Решение по диагностике и лечению принимает врач.
             <br />
             Система не назначает терапию автоматически.
-          </p>
-          <p>
-            Прототип · Этап 4<br />
-            Только синтетические данные
           </p>
         </div>
       </footer>

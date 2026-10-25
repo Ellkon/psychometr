@@ -40,7 +40,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
-        navigateFallbackDenylist: [/^\/api\//, /^\/i\//, /^\/invite/],
+        navigateFallbackDenylist: [/^\/api\//, /^\/i\//, /^\/invite/, /^\/ws$/],
       },
       devOptions: { enabled: false },
     }),
@@ -54,6 +54,11 @@ export default defineConfig({
       '/api': {
         target: process.env['API_PROXY_TARGET'] ?? 'http://127.0.0.1:3000',
         changeOrigin: true,
+      },
+      '/ws': {
+        target: process.env['API_PROXY_TARGET'] ?? 'http://127.0.0.1:3000',
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

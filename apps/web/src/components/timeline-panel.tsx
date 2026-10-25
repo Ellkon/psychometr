@@ -60,7 +60,7 @@ export function TimelinePanel({ patientId }: { patientId: string }) {
         <h2 className="text-xl font-semibold">Таймлайн</h2>
         <p className="text-sm text-slate-600">
           Баллы шкал, назначения, отметки доз, нежелательные явления и срабатывания правил — от
-          новых к старым. Алерты появятся на этапе 6.
+          новых к старым.
         </p>
       </CardHeader>
       <CardContent>

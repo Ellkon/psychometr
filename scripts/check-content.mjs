@@ -28,6 +28,7 @@ const VALIDATORS = {
   'scales/gad7.ru.json': ScaleFileSchema,
   'rules/routing.json': RuleFileSchema,
   'rules/adherence.json': RuleFileSchema,
+  'rules/safety.json': RuleFileSchema,
   'emergency/patient.ru.json': EmergencyFileSchema,
   'drugs/grls-psychotropics.json': DrugCatalogFileSchema,
 };

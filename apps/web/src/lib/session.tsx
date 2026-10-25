@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { SessionClient, type LogoutMarker } from './api.js';
+import { clearOutboxDatabase } from './outbox.js';
 
 const LOGOUT_MARKER = 'compass.logout-pending';
 let fallbackPending = false;
@@ -47,20 +48,8 @@ export async function clearPrivateState(): Promise<void> {
   await clearOutbox();
 }
 async function clearOutbox(): Promise<void> {
-  // Stage 6 will use this single database for the unsent outbox only.
-  if (typeof indexedDB !== 'undefined')
-    await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.deleteDatabase('compass-outbox');
-      request.onsuccess = () => {
-        resolve();
-      };
-      request.onerror = () => {
-        reject(new Error('Не удалось очистить локальную очередь'));
-      };
-      request.onblocked = () => {
-        reject(new Error('Закройте другие вкладки, чтобы очистить локальную очередь'));
-      };
-    });
+  // The unsent dose outbox (FR-9) is removed on logout; the connection is closed first.
+  await clearOutboxDatabase();
 }
 const Context = createContext<{ logout: () => Promise<void>; privacyError: string | null } | null>(
   null,

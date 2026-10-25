@@ -76,10 +76,7 @@ export function IdentityForm({
           defaultValue={initial?.snils ?? ''}
         />
       </div>
-      <p className="text-xs text-slate-500">
-        Пока система проходит проверку, используйте только вымышленные данные. ФИО и контакты
-        хранятся зашифрованными.
-      </p>
+      <p className="text-xs text-slate-500">ФИО и контакты хранятся зашифрованными.</p>
     </AsyncForm>
   );
 }

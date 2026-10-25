@@ -19,6 +19,7 @@ const sensitiveFields = [
   'secretHash',
   'firstName',
   'lastName',
+  'patientName',
   'middleName',
   'phone',
   'birthDate',

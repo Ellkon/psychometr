@@ -1,5 +1,6 @@
 // Test-only HTTPS adapter for environments without Docker. Production uses Caddy.
 import { createServer } from 'node:https';
+import { connect } from 'node:net';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, readdir, mkdtemp, rm } from 'node:fs/promises';
@@ -133,6 +134,31 @@ const server = createServer({ key, cert }, (request, response) => {
   void serve().catch(() => {
     response.writeHead(500);
     response.end('Test adapter failed');
+  });
+});
+// WebSocket alerts (FR-8.1): upgrades are piped to the app's own loopback listener, as Caddy does.
+await app.listen({ port: 0, host: '127.0.0.1' });
+const internal = app.server.address();
+if (!internal || typeof internal === 'string') throw new Error('Internal listener missing');
+const internalPort = internal.port;
+server.on('upgrade', (request, socket, head) => {
+  const upstream = connect(internalPort, '127.0.0.1');
+  upstream.once('connect', () => {
+    const lines = [`${request.method ?? 'GET'} ${request.url ?? '/'} HTTP/1.1`];
+    const raw = request.rawHeaders;
+    for (let index = 0; index + 1 < raw.length; index += 2) {
+      // eslint-disable-next-line security/detect-object-injection -- loop counter over rawHeaders
+      lines.push(`${raw[index] ?? ''}: ${raw[index + 1] ?? ''}`);
+    }
+    upstream.write(`${lines.join('\r\n')}\r\n\r\n`);
+    if (head.length > 0) upstream.write(head);
+    socket.pipe(upstream).pipe(socket);
+  });
+  upstream.on('error', () => {
+    socket.destroy();
+  });
+  socket.on('error', () => {
+    upstream.destroy();
   });
 });
 await new Promise<void>((resolve) => {

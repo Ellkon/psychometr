@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   bigint,
   date,
   boolean,
@@ -81,6 +82,8 @@ export const careTeam = pgTable(
     practitionerId: uuid('practitioner_id')
       .notNull()
       .references(() => practitioners.userId, { onDelete: 'restrict' }),
+    /** Order of assignment: the first practitioner is the primary alert recipient (FR-8.3). */
+    assignedAt: time('assigned_at').notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.patientId, table.practitionerId] }),
@@ -418,5 +421,54 @@ export const adverseEvents = pgTable(
     index('adverse_events_patient_idx').on(table.patientId, table.recordedAt),
     check('adverse_events_severity', sql`${table.severity} in ('mild', 'moderate', 'severe')`),
     check('adverse_events_description_length', sql`length(${table.description}) <= 1000`),
+  ],
+);
+
+/**
+ * Критичный алерт врачу (FR-8). Строка одновременно является transactional outbox: её создают
+ * в той же транзакции, что и срабатывание critical-правила. Текст берётся из правила
+ * (content/rules). Содержимое неизменно; меняются только таймстемпы переходов и эскалация
+ * (проверяется триггером).
+ */
+export const alerts = pgTable(
+  'alerts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    patientId: uuid('patient_id')
+      .notNull()
+      .references(() => patients.id, { onDelete: 'restrict' }),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => practitioners.userId, { onDelete: 'restrict' }),
+    evaluationId: uuid('evaluation_id')
+      .notNull()
+      .references(() => ruleEvaluations.id, { onDelete: 'restrict' }),
+    ruleId: text('rule_id').notNull(),
+    severity: text('severity').notNull(),
+    message: text('message').notNull(),
+    suggestedAction: text('suggested_action').notNull(),
+    status: text('status').$type<'pending' | 'sent' | 'delivered' | 'acknowledged'>().notNull(),
+    idempotencyKey: text('idempotency_key').notNull().unique(),
+    escalationOf: uuid('escalation_of').references((): AnyPgColumn => alerts.id, {
+      onDelete: 'restrict',
+    }),
+    createdAt: time('created_at').notNull().defaultNow(),
+    /** Set once at creation for a primary alert; cleared when escalated or when no reserve exists. */
+    escalateAt: time('escalate_at'),
+    escalatedAt: time('escalated_at'),
+    sentAt: time('sent_at'),
+    attemptedAt: time('attempted_at'),
+    deliveredAt: time('delivered_at'),
+    acknowledgedAt: time('acknowledged_at'),
+    acknowledgedBy: uuid('acknowledged_by').references(() => users.id, { onDelete: 'restrict' }),
+  },
+  (table) => [
+    index('alerts_recipient_idx').on(table.recipientId, table.status),
+    index('alerts_escalation_idx').on(table.escalateAt),
+    check(
+      'alerts_status_valid',
+      sql`${table.status} in ('pending', 'sent', 'delivered', 'acknowledged')`,
+    ),
+    check('alerts_severity_valid', sql`${table.severity} = 'critical'`),
   ],
 );

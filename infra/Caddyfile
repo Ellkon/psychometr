@@ -23,9 +23,13 @@ https://{$APP_HOST:localhost} {
 		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		-Server
 	}
-	@private path /api/* /i/* /invite /login /patient-login /patients/* /admin /audit
+	@private path /api/* /ws /i/* /invite /login /patient-login /patients/* /admin /audit
 	header @private Cache-Control "no-store"
 	handle /api/* {
+		reverse_proxy api:3000
+	}
+	# WebSocket alerts (FR-8.1): Caddy upgrades the connection itself.
+	handle /ws {
 		reverse_proxy api:3000
 	}
 	handle {

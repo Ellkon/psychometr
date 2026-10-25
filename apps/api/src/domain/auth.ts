@@ -451,6 +451,40 @@ export class AuthService {
     });
     return unwrap(result);
   }
+  /**
+   * Read-only session check for long-lived sockets (alerts). Unlike authenticate(), it never
+   * extends the idle timeout: a socket is not user activity, so reconnects cannot keep a session
+   * alive. Returns null when the token is invalid, the session is revoked, expired or idle, or the
+   * user is deactivated. Does not write audit records, so periodic checks stay quiet.
+   */
+  async socketPrincipal(token: string): Promise<Principal | null> {
+    let claims;
+    try {
+      claims = await this.options.tokens.verify(token);
+    } catch {
+      return null;
+    }
+    return this.options.db.transaction(async (tx) => {
+      const [user] = await tx.select().from(users).where(eq(users.id, claims.sub));
+      const [session] = await tx.select().from(sessions).where(eq(sessions.id, claims.sid));
+      const now = this.now();
+      if (
+        !user ||
+        !session ||
+        session.userId !== user.id ||
+        !user.active ||
+        session.revokedAt ||
+        session.expiresAt <= now ||
+        session.idleExpiresAt <= now
+      )
+        return null;
+      try {
+        return await this.principal(tx, user);
+      } catch {
+        return null;
+      }
+    });
+  }
   async logout(secret?: string): Promise<void> {
     await this.options.db.transaction(async (tx) => {
       if (!secret) return;

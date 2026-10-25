@@ -54,7 +54,8 @@ export async function loadDoseMarks(
     );
   for (const row of rows) {
     let byMedication = marks.get(row.medicationRequestId);
-    if (!byMedication) marks.set(row.medicationRequestId, (byMedication = new Map<number, DoseStatus>()));
+    if (!byMedication)
+      marks.set(row.medicationRequestId, (byMedication = new Map<number, DoseStatus>()));
     byMedication.set(row.scheduledFor.getTime(), row.status);
   }
   return marks;

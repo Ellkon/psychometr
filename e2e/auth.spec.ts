@@ -80,21 +80,14 @@ test('doctor invitation, patient consent, PIN return and immediate revocation', 
     await patient.getByRole('link', { name: 'Мои данные' }).click();
     expect((await response).headers()['cache-control']).toContain('no-store');
     await expect(patient.getByRole('heading', { name: 'Синтетический Сценарий' })).toBeVisible();
-    await patient.evaluate(async () => {
-      await new Promise<void>((resolve, reject) => {
-        const open = indexedDB.open('compass-outbox', 1);
-        open.onupgradeneeded = () => {
-          open.result.createObjectStore('pending');
-        };
-        open.onsuccess = () => {
-          open.result.close();
-          resolve();
-        };
-        open.onerror = () => {
-          reject(new Error('Test queue setup failed'));
-        };
-      });
-    });
+    // The app creates its own dose outbox (FR-9, Dexie) when the diary opens. Logout must remove it.
+    await expect
+      .poll(async () =>
+        (await patient.evaluate(() => indexedDB.databases())).some(
+          (db) => db.name === 'compass-outbox',
+        ),
+      )
+      .toBe(true);
     await patient.getByRole('button', { name: 'Выйти', exact: true }).click();
     await expect(
       patient.getByRole('heading', { name: 'Клинический компас', exact: true }),
@@ -110,7 +103,7 @@ test('doctor invitation, patient consent, PIN return and immediate revocation', 
     await expect(patient.getByRole('heading', { name: 'Добро пожаловать' })).toBeVisible();
     await page.getByLabel('Подтверждаю отзыв всех сессий пациента').check();
     await page.getByRole('button', { name: 'Отозвать все сессии' }).click();
-    await expect(page.getByRole('status')).toContainText('отозваны');
+    await expect(page.getByRole('status').filter({ hasText: 'отозваны' })).toBeVisible();
     await patient.reload();
     await expect(
       patient.getByRole('heading', { name: 'Клинический компас', exact: true }),

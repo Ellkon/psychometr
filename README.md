@@ -81,7 +81,7 @@ pnpm dev              # API + Vite; нужны .env и доступная лок
 pnpm build
 pnpm lint
 pnpm typecheck
-pnpm test             # 168 проверок, в том числе на настоящем PostgreSQL 16
+pnpm test             # 279 проверок (API 233, web 28, shared 8, скрипты 10), в том числе на PostgreSQL 16
 pnpm format:check
 pnpm check:content
 pnpm audit --audit-level=high

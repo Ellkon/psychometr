@@ -50,6 +50,20 @@
       "when": 1792775260152,
       "tag": "0006_therapy_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792913104234,
+      "tag": "0007_alerts_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792913123515,
+      "tag": "0008_alerts_permissions",
+      "breakpoints": true
     }
   ]
 }

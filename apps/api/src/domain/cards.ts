@@ -12,6 +12,7 @@ import {
 import type { Database, Transaction } from '../db/client.js';
 import { observations, ruleEvaluations, tasks } from '../db/schema.js';
 import { appendAudit } from './audit.js';
+import type { AlertService } from './alerts.js';
 import { assertCanAccessPatient, assertRole, authorized } from './access.js';
 import { DomainError } from './errors.js';
 import { buildFacts, type RuleEngine, type ScoreSnapshot } from './rules.js';
@@ -26,6 +27,7 @@ export class ClinicalCardService implements CardEvaluator {
     private readonly db: Database,
     private readonly engine: RuleEngine,
     private readonly now: () => Date = () => new Date(),
+    private readonly alerts?: AlertService,
   ) {}
 
   async evaluate(tx: Transaction, patientId: string, actorId: string, now: Date): Promise<void> {
@@ -84,6 +86,8 @@ export class ClinicalCardService implements CardEvaluator {
           createdAt: now,
         });
       }
+      // Critical alert (FR-8): same transaction as the answer, so a rollback leaves no alert.
+      await this.alerts?.raise(tx, patientId, evaluation.id, rule, now);
       await appendAudit(
         tx,
         { action: 'rule.triggered', actorId, resourceId: patientId, detail: rule.id },

@@ -165,6 +165,12 @@ export class SessionClient {
       }
     });
   }
+  /** Access token for the WebSocket handshake; refreshes once when the session has none. */
+  async accessToken(): Promise<string> {
+    if (!this.token) await this.refresh();
+    if (!this.token) throw new ApiFailure(401, 'no_session', 'Сессия не активна');
+    return this.token;
+  }
   refresh(): Promise<AuthResponse> {
     if (this.refreshPromise) return this.refreshPromise;
     if (this.marker.pending())

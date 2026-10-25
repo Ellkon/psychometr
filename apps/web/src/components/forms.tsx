@@ -7,12 +7,17 @@ export function Button({
   onClick,
   disabled,
   children,
-}: Pick<ComponentProps<'button'>, 'className' | 'type' | 'onClick' | 'disabled' | 'children'>) {
+  'aria-label': ariaLabel,
+}: Pick<
+  ComponentProps<'button'>,
+  'className' | 'type' | 'onClick' | 'disabled' | 'children' | 'aria-label'
+>) {
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
+      aria-label={ariaLabel}
       className={`inline-flex min-h-10 items-center justify-center rounded-md bg-teal-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >
       {children}

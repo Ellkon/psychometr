@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CreatedSchema,
@@ -18,6 +18,13 @@ import {
   parseDoseTimes,
   severityLabel,
 } from '../lib/therapy.js';
+import {
+  classifySendError,
+  enqueueDoseMark,
+  flushOutbox,
+  indexedOutbox,
+  type DoseOutboxItem,
+} from '../lib/outbox.js';
 import { AsyncForm, Button, ErrorNotice, Field, text } from './forms.js';
 import { Card, CardContent, CardHeader } from './ui/card.js';
 
@@ -255,8 +262,80 @@ function AdverseEventList({
   );
 }
 
+type DoseStatus = 'taken' | 'skipped';
+
+/**
+ * Dose marks go through the device outbox (FR-9): written to IndexedDB first, then sent. A mark
+ * survives a dropped connection and is resent when the browser is back online; the server keeps
+ * one mark per slot, so a resend never stores a duplicate.
+ */
+function useDoseOutbox(patientId: string) {
+  const queryClient = useQueryClient();
+  const [queued, setQueued] = useState<DoseOutboxItem[]>([]);
+  const [refused, setRefused] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  // One flush at a time: an `online` event during a send must not send the same mark twice.
+  const flushing = useRef<Promise<void> | null>(null);
+
+  const reload = useCallback(async () => {
+    setQueued(await indexedOutbox.list());
+  }, []);
+  const flush = useCallback((): Promise<void> => {
+    flushing.current ??= (async () => {
+      try {
+        const report = await flushOutbox(indexedOutbox, async (item) => {
+          try {
+            await sessionClient.request(
+              `/api/patients/${item.patientId}/medications/${item.medicationId}/doses`,
+              SuccessSchema,
+              { method: 'POST', body: { scheduledFor: item.scheduledFor, status: item.status } },
+            );
+            return 'sent';
+          } catch (caught) {
+            return classifySendError(caught);
+          }
+        });
+        if (report.rejected.length > 0) setRefused((count) => count + report.rejected.length);
+        if (report.sent > 0 || report.rejected.length > 0)
+          await queryClient.invalidateQueries({ queryKey: ['therapy'] });
+        await reload();
+      } finally {
+        flushing.current = null;
+      }
+    })();
+    return flushing.current;
+  }, [queryClient, reload]);
+
+  useEffect(() => {
+    flush().catch(() => {
+      setError('Не удалось прочитать очередь на этом устройстве');
+    });
+    const onOnline = () => {
+      void flush().catch(() => undefined);
+    };
+    window.addEventListener('online', onOnline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+    };
+  }, [flush]);
+
+  const mark = async (medicationId: string, scheduledFor: string, status: DoseStatus) => {
+    setError(null);
+    try {
+      await enqueueDoseMark(indexedOutbox, { patientId, medicationId, scheduledFor, status });
+    } catch {
+      setError('Не удалось сохранить отметку на этом устройстве');
+      return;
+    }
+    await reload();
+    await flush().catch(() => undefined);
+  };
+  return { queued, refused, error, mark };
+}
+
 function PatientTherapyView({ patientId, data }: { patientId: string; data: PatientTherapy }) {
   const active = data.medications.filter((medication) => medication.status === 'active');
+  const outbox = useDoseOutbox(patientId);
   return (
     <Card>
       <CardHeader>
@@ -272,34 +351,58 @@ function PatientTherapyView({ patientId, data }: { patientId: string; data: Pati
         ) : (
           <ul className="grid gap-4">
             {active.map((medication) => (
-              <DoseItem key={medication.id} patientId={patientId} medication={medication} />
+              <DoseItem
+                key={medication.id}
+                medication={medication}
+                queued={outbox.queued}
+                onMark={outbox.mark}
+              />
             ))}
           </ul>
         )}
+        {outbox.queued.length > 0 && (
+          <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-950">
+            Не отправлено: {String(outbox.queued.length)}. Отметки сохранены на этом устройстве и
+            отправятся, когда появится связь.
+          </p>
+        )}
+        {outbox.refused > 0 && (
+          <p
+            role="alert"
+            className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900"
+          >
+            Сервер не принял отметок: {String(outbox.refused)}. Время отметки прошло или доза уже
+            отмечена иначе.
+          </p>
+        )}
+        <ErrorNotice message={outbox.error} />
         <AdverseEventForm patientId={patientId} medications={active} />
       </CardContent>
     </Card>
   );
 }
 
-function DoseItem({ patientId, medication }: { patientId: string; medication: Medication }) {
-  const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null),
-    [busy, setBusy] = useState(false);
+function DoseItem({
+  medication,
+  queued,
+  onMark,
+}: {
+  medication: Medication;
+  queued: readonly DoseOutboxItem[];
+  onMark: (medicationId: string, scheduledFor: string, status: DoseStatus) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
   const now = Date.now();
   const markable = new Set(markableSlots(medication.slots, now).map((slot) => slot.scheduledFor));
-  const mark = async (scheduledFor: string, status: 'taken' | 'skipped') => {
+  const waiting = new Map(
+    queued
+      .filter((item) => item.medicationId === medication.id)
+      .map((item) => [item.scheduledFor, item.status]),
+  );
+  const mark = async (scheduledFor: string, status: DoseStatus) => {
     setBusy(true);
-    setError(null);
     try {
-      await sessionClient.request(
-        `/api/patients/${patientId}/medications/${medication.id}/doses`,
-        SuccessSchema,
-        { method: 'POST', body: { scheduledFor, status } },
-      );
-      await queryClient.invalidateQueries({ queryKey: ['therapy'] });
-    } catch (problem) {
-      setError(problem instanceof Error ? problem.message : 'Не удалось сохранить отметку');
+      await onMark(medication.id, scheduledFor, status);
     } finally {
       setBusy(false);
     }
@@ -316,6 +419,10 @@ function DoseItem({ patientId, medication }: { patientId: string; medication: Me
             {slot.status ? (
               <span className={slot.status === 'taken' ? 'text-teal-800' : 'text-slate-500'}>
                 {doseStatusLabel[slot.status]}
+              </span>
+            ) : waiting.has(slot.scheduledFor) ? (
+              <span className="text-amber-800">
+                {doseStatusLabel[waiting.get(slot.scheduledFor) ?? 'taken']}: ждёт связи
               </span>
             ) : markable.has(slot.scheduledFor) ? (
               <span className="flex gap-2">
@@ -345,7 +452,6 @@ function DoseItem({ patientId, medication }: { patientId: string; medication: Me
           </li>
         ))}
       </ul>
-      <ErrorNotice message={error} />
     </li>
   );
 }

@@ -30,13 +30,23 @@ const sources = new Set([
 ]);
 
 describe('product rule content', () => {
-  it('loads with no active routing rules, so routing reports pending clinical agreement', async () => {
+  it('loads the safety rules and the adherence draft; routing stays pending clinical agreement', async () => {
     const engine = await loadRuleEngine(contentDir);
-    // Only the adherence draft exists; nothing is evaluated.
-    expect(engine.all.map((item) => [item.rule.id, item.rule.status])).toEqual([
-      ['adherence_missed_two_in_row', 'draft'],
-    ]);
-    expect(engine.all.every((item) => item.decision === null)).toBe(true);
+    expect(engine.all.map((item) => [item.rule.id, item.rule.status]).sort()).toEqual(
+      [
+        ['adherence_missed_two_in_row', 'draft'],
+        ['gad7_band_high', 'active'],
+        ['gad7_band_medium', 'active'],
+        ['phq9_item9_positive', 'active'],
+        ['phq9_item9_psychiatric_followup', 'active'],
+      ].sort(),
+    );
+    // A draft is never evaluated.
+    expect(
+      engine.all
+        .filter((item) => item.rule.status === 'draft')
+        .every((item) => item.decision === null),
+    ).toBe(true);
     expect(engine.routingStatus()).toBe('pending_clinical_agreement');
     expect(engine.activeCount('routing')).toBe(0);
   });

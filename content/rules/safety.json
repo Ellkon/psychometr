@@ -1,0 +1,349 @@
+{
+  "note": "Правила безопасности (ТЗ FR-5.3) и правила из КР457. Пункт 9 PHQ-9 — отметка для дополнительной оценки риска, а не заключение о непосредственной угрозе. Признак суицидального риска = ответ на пункт 9 больше 0 (отдельного фактора нет). Диагноз ГТР не хранится, поэтому правило КР по наблюдению психиатром применяется ко всем с ответом больше 0. Доставка алертов — этап 6. reviewed_at — подтверждение заказчика, не клиническая подпись.",
+  "rules": [
+    {
+      "id": "phq9_item9_positive",
+      "version": "1.0.0",
+      "status": "active",
+      "severity": "critical",
+      "source_id": "pogosova-phq-2014",
+      "source_location": "PHQ-9, пункт 9 (phq9_09): ответ больше 0; см. content/scales/phq9.ru.json, safety_item",
+      "message": "Ответ на пункт 9 PHQ-9 больше 0. Требуется дополнительная оценка риска. Это не заключение о непосредственной угрозе.",
+      "suggested_action": "Провести дополнительную оценку риска с пациентом.",
+      "reviewed_at": "2026-10-23",
+      "decision": {
+        "contentType": "application/vnd.gorules.decision",
+        "nodes": [
+          {
+            "id": "in",
+            "name": "request",
+            "type": "inputNode",
+            "position": {
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": "table",
+            "name": "rule",
+            "type": "decisionTableNode",
+            "position": {
+              "x": 200,
+              "y": 0
+            },
+            "content": {
+              "hitPolicy": "first",
+              "inputs": [
+                {
+                  "id": "i1",
+                  "name": "phq9_item9_positive",
+                  "field": "phq9_item9_positive"
+                }
+              ],
+              "outputs": [
+                {
+                  "id": "o1",
+                  "name": "triggered",
+                  "field": "triggered"
+                }
+              ],
+              "rules": [
+                {
+                  "_id": "r1",
+                  "i1": "true",
+                  "o1": "true"
+                },
+                {
+                  "_id": "r2",
+                  "i1": "",
+                  "o1": "false"
+                }
+              ]
+            }
+          },
+          {
+            "id": "out",
+            "name": "response",
+            "type": "outputNode",
+            "position": {
+              "x": 400,
+              "y": 0
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "sourceId": "in",
+            "targetId": "table",
+            "type": "edge"
+          },
+          {
+            "id": "e2",
+            "sourceId": "table",
+            "targetId": "out",
+            "type": "edge"
+          }
+        ]
+      }
+    },
+    {
+      "id": "gad7_band_medium",
+      "version": "1.0.0",
+      "status": "active",
+      "severity": "info",
+      "source_id": "kr-457-gtr",
+      "source_location": "КР457, Приложение Г2 «Скрининговый опросник ГТР-7», ключ интерпретации: 10–14 баллов, «Средний» (стр. 86)",
+      "message": "Уровень тревожности: Средний (сумма баллов по ГТР-7 10–14).",
+      "suggested_action": "Данный инструмент является скрининговым и требует дальнейшей клинической диагностики для установки диагноза ПР.",
+      "reviewed_at": "2026-10-24",
+      "decision": {
+        "contentType": "application/vnd.gorules.decision",
+        "nodes": [
+          {
+            "id": "in",
+            "name": "request",
+            "type": "inputNode",
+            "position": {
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": "table",
+            "name": "rule",
+            "type": "decisionTableNode",
+            "position": {
+              "x": 200,
+              "y": 0
+            },
+            "content": {
+              "hitPolicy": "first",
+              "inputs": [
+                {
+                  "id": "i1",
+                  "name": "gad7_band",
+                  "field": "gad7_band"
+                }
+              ],
+              "outputs": [
+                {
+                  "id": "o1",
+                  "name": "triggered",
+                  "field": "triggered"
+                }
+              ],
+              "rules": [
+                {
+                  "_id": "r1",
+                  "i1": "\"Средний\"",
+                  "o1": "true"
+                },
+                {
+                  "_id": "r2",
+                  "i1": "",
+                  "o1": "false"
+                }
+              ]
+            }
+          },
+          {
+            "id": "out",
+            "name": "response",
+            "type": "outputNode",
+            "position": {
+              "x": 400,
+              "y": 0
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "sourceId": "in",
+            "targetId": "table",
+            "type": "edge"
+          },
+          {
+            "id": "e2",
+            "sourceId": "table",
+            "targetId": "out",
+            "type": "edge"
+          }
+        ]
+      }
+    },
+    {
+      "id": "gad7_band_high",
+      "version": "1.0.0",
+      "status": "active",
+      "severity": "warning",
+      "source_id": "kr-457-gtr",
+      "source_location": "КР457, Приложение Г2 «Скрининговый опросник ГТР-7», ключ интерпретации: 15–21 балл, «Высокий» (стр. 86)",
+      "message": "Уровень тревожности: Высокий (сумма баллов по ГТР-7 15–21).",
+      "suggested_action": "Данный инструмент является скрининговым и требует дальнейшей клинической диагностики для установки диагноза ПР.",
+      "reviewed_at": "2026-10-24",
+      "decision": {
+        "contentType": "application/vnd.gorules.decision",
+        "nodes": [
+          {
+            "id": "in",
+            "name": "request",
+            "type": "inputNode",
+            "position": {
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": "table",
+            "name": "rule",
+            "type": "decisionTableNode",
+            "position": {
+              "x": 200,
+              "y": 0
+            },
+            "content": {
+              "hitPolicy": "first",
+              "inputs": [
+                {
+                  "id": "i1",
+                  "name": "gad7_band",
+                  "field": "gad7_band"
+                }
+              ],
+              "outputs": [
+                {
+                  "id": "o1",
+                  "name": "triggered",
+                  "field": "triggered"
+                }
+              ],
+              "rules": [
+                {
+                  "_id": "r1",
+                  "i1": "\"Высокий\"",
+                  "o1": "true"
+                },
+                {
+                  "_id": "r2",
+                  "i1": "",
+                  "o1": "false"
+                }
+              ]
+            }
+          },
+          {
+            "id": "out",
+            "name": "response",
+            "type": "outputNode",
+            "position": {
+              "x": 400,
+              "y": 0
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "sourceId": "in",
+            "targetId": "table",
+            "type": "edge"
+          },
+          {
+            "id": "e2",
+            "sourceId": "table",
+            "targetId": "out",
+            "type": "edge"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phq9_item9_psychiatric_followup",
+      "version": "1.0.0",
+      "status": "active",
+      "severity": "warning",
+      "source_id": "kr-457-gtr",
+      "source_location": "КР457, раздел 5 «Профилактика и диспансерное наблюдение» (стр. 39): диспансерное наблюдение врачом-психиатром при суицидальном риске",
+      "message": "Ответ на пункт 9 PHQ-9 больше 0 (признак суицидального риска). КР457: «Всем пациентам с ГТР рекомендуется диспансерное наблюдение врачом-психиатром в случаях наличия суицидального риска, тяжелого течения, коморбидной психической патологии, резистентности к терапии с целью динамической оценки состояния, определения показаний для коррекции амбулаторного лечения, своевременной госпитализации в стационар.»",
+      "suggested_action": "Рекомендуется диспансерное наблюдение врачом-психиатром.",
+      "reviewed_at": "2026-10-24",
+      "decision": {
+        "contentType": "application/vnd.gorules.decision",
+        "nodes": [
+          {
+            "id": "in",
+            "name": "request",
+            "type": "inputNode",
+            "position": {
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": "table",
+            "name": "rule",
+            "type": "decisionTableNode",
+            "position": {
+              "x": 200,
+              "y": 0
+            },
+            "content": {
+              "hitPolicy": "first",
+              "inputs": [
+                {
+                  "id": "i1",
+                  "name": "phq9_item9_positive",
+                  "field": "phq9_item9_positive"
+                }
+              ],
+              "outputs": [
+                {
+                  "id": "o1",
+                  "name": "triggered",
+                  "field": "triggered"
+                }
+              ],
+              "rules": [
+                {
+                  "_id": "r1",
+                  "i1": "true",
+                  "o1": "true"
+                },
+                {
+                  "_id": "r2",
+                  "i1": "",
+                  "o1": "false"
+                }
+              ]
+            }
+          },
+          {
+            "id": "out",
+            "name": "response",
+            "type": "outputNode",
+            "position": {
+              "x": 400,
+              "y": 0
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "sourceId": "in",
+            "targetId": "table",
+            "type": "edge"
+          },
+          {
+            "id": "e2",
+            "sourceId": "table",
+            "targetId": "out",
+            "type": "edge"
+          }
+        ]
+      }
+    }
+  ]
+}

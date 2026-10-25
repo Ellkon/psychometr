@@ -38,6 +38,7 @@ export async function fixture(withConsent = true, rules?: RuleEngine) {
     consent: withConsent ? TEST_CONSENT : undefined,
     clock: () => clock,
     rules,
+    workers: false,
   });
   let closed = false;
   const close = async () => {

@@ -19,6 +19,9 @@ import { appendAudit, verifyAuditChain } from './audit.js';
 import { assertCanAccessPatient, assertRole, authorized } from './access.js';
 import { DomainError } from './errors.js';
 
+/** Admin directory size. Pagination or search is needed before a clinic grows past this. */
+const PRACTITIONER_LIST_LIMIT = 500;
+
 export class PatientService {
   constructor(
     private readonly db: Database,
@@ -269,7 +272,9 @@ export class PatientService {
         .from(practitioners)
         .innerJoin(users, eq(users.id, practitioners.userId))
         .where(eq(users.active, true))
-        .limit(100);
+        // Newest first and a deterministic order: an unordered cut hid arbitrary doctors.
+        .orderBy(desc(users.createdAt), asc(users.id))
+        .limit(PRACTITIONER_LIST_LIMIT);
       return {
         practitioners: rows.flatMap((row) => (row.email ? [{ id: row.id, email: row.email }] : [])),
       };

@@ -104,13 +104,10 @@ export function HomePage() {
           </CardContent>
         </Card>
       </div>
-      <p className="mt-7 text-sm text-slate-500">
-        Разрабатываемый прототип. Пока используйте только синтетические данные.
-      </p>
     </div>
   );
 }
-/** In-app reminder only; push and SMS reminders arrive with stage 6 alerts. */
+/** In-app reminder only: out-of-app channels carry no medical text (AGENTS.md). */
 function DoseReminder({ patientId }: { patientId: string }) {
   const therapy = useTherapy(patientId);
   if (!therapy.data) return null;
