@@ -91,7 +91,16 @@ export function pickReserve(careTeamInOrder: readonly string[], current: string)
   return careTeamInOrder.find((id) => id !== current) ?? null;
 }
 
+/** Delivery timings for monitoring (NFR-3); seconds from creation. Optional in tests. */
+export interface AlertMetrics {
+  delivered(seconds: number): void;
+  acknowledged(seconds: number): void;
+}
+
 export class AlertService {
+  /** Set by the app after the metrics plugin is registered. */
+  metrics: AlertMetrics | undefined;
+
   constructor(
     private readonly db: Database,
     private readonly vault: IdentityVault,
@@ -182,6 +191,7 @@ export class AlertService {
         .returning({ id: alerts.id });
       // A concurrent acknowledgement won the row lock: one audit record per alert.
       if (updated.length === 0) return { ok: true as const };
+      this.metrics?.acknowledged((now.getTime() - row.createdAt.getTime()) / 1000);
       await appendAudit(
         tx,
         {
@@ -198,9 +208,10 @@ export class AlertService {
 
   /** Client confirmed it received the alert over the socket: sent → delivered. */
   async markReceived(practitionerId: string, alertId: string): Promise<void> {
-    await this.db
+    const now = this.now();
+    const updated = await this.db
       .update(alerts)
-      .set({ status: 'delivered', deliveredAt: this.now() })
+      .set({ status: 'delivered', deliveredAt: now })
       .where(
         and(
           eq(alerts.id, alertId),
@@ -208,7 +219,10 @@ export class AlertService {
           eq(alerts.status, 'sent'),
           stillAssigned,
         ),
-      );
+      )
+      .returning({ createdAt: alerts.createdAt });
+    for (const row of updated)
+      this.metrics?.delivered((now.getTime() - row.createdAt.getTime()) / 1000);
   }
 
   /** Sends every open undelivered alert to a socket that has just authenticated. */

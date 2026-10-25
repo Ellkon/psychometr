@@ -583,3 +583,19 @@ describe('registry and timeline show alerts (FR-7.1, FR-7.2)', () => {
     });
   });
 });
+
+describe('Prometheus metrics (NFR-3)', () => {
+  it('exposes alert delivery timings and route patterns, never patient ids', async () => {
+    await submitItem9(1);
+    const [alert] = await listAs(f.doctor.accessToken);
+    await f.request('POST', `/api/alerts/${idOf(alert)}/ack`, f.doctor.accessToken, {});
+    await f.request('GET', `/api/patients/${f.patientId}/timeline`, f.doctor.accessToken);
+
+    const response = await f.app.inject({ method: 'GET', url: '/metrics' });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('compass_alert_acknowledgement_seconds_count 1');
+    expect(response.body).toContain('compass_alert_delivery_seconds');
+    expect(response.body).toContain('route="/api/patients/:patientId/timeline"');
+    expect(response.body).not.toContain(f.patientId);
+  });
+});

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
+import fastifyMetrics from 'fastify-metrics';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ConsentDocumentSchema, type ConsentDocument } from '@psychometr/shared';
@@ -79,6 +80,14 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(cookie);
   await app.register(websocket, { options: { maxPayload: 8_192 } });
   await registerSecurity(app);
+  // Prometheus (NFR-3). /metrics sits outside /api, so Caddy never exposes it: only the internal
+  // network can scrape it. Route labels are route patterns, never URLs with patient ids.
+  // CommonJS package: under NodeNext the plugin is the `default` export of the namespace.
+  await app.register(fastifyMetrics.default, {
+    endpoint: '/metrics',
+    clearRegisterOnInit: true,
+    routeMetrics: { enabled: true, registeredRoutesOnly: true, groupStatusCodes: false },
+  });
   registerErrorHandler(app);
   let consent = options.consent;
   if (!consent && env.CONSENT_TEXT_PATH && env.CONSENT_VERSION) {
@@ -92,6 +101,24 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const alerts = new AlertService(db, vault, new AlertHub(), options.clock);
   // Exposed for tests and operations; the same instance serves sockets and the worker.
   app.decorate('alerts', alerts);
+  const delivery = new app.metrics.client.Histogram({
+    name: 'compass_alert_delivery_seconds',
+    help: 'Time from alert creation to receipt confirmed by the doctor client (FR-8.2)',
+    buckets: [0.5, 1, 2, 5, 10, 30, 60, 300, 1800],
+  });
+  const acknowledgement = new app.metrics.client.Histogram({
+    name: 'compass_alert_acknowledgement_seconds',
+    help: 'Time from alert creation to acknowledgement by the doctor (FR-8.2)',
+    buckets: [10, 30, 60, 300, 900, 1800, 3600, 7200],
+  });
+  alerts.metrics = {
+    delivered: (seconds) => {
+      delivery.observe(seconds);
+    },
+    acknowledged: (seconds) => {
+      acknowledgement.observe(seconds);
+    },
+  };
   registerAccessRoutes(
     app,
     auth,
