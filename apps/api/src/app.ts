@@ -67,7 +67,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const connection = options.db
     ? undefined
     : connectDatabase(env.DATABASE_URL, (code) => {
-        app.log.error({ code }, 'database idle client error');
+        // `code` is redacted (invite codes), so the SQLSTATE goes under its own name.
+        app.log.error({ sqlState: code }, 'database idle client error');
       });
   const db = options.db ?? connection?.db;
   if (!db) throw new Error('Database not configured');
@@ -79,7 +80,14 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.setSerializerCompiler(serializerCompiler);
   await app.register(cookie);
   await app.register(websocket, { options: { maxPayload: 8_192 } });
-  await registerSecurity(app);
+  const tokens = new AccessTokens(Buffer.from(env.JWT_ACCESS_SECRET, 'base64'), options.clock);
+  await registerSecurity(app, async (token) => {
+    try {
+      return (await tokens.verify(token)).sub;
+    } catch {
+      return null;
+    }
+  });
   // Prometheus (NFR-3). /metrics sits outside /api, so Caddy never exposes it: only the internal
   // network can scrape it. Route labels are route patterns, never URLs with patient ids.
   // CommonJS package: under NodeNext the plugin is the `default` export of the namespace.
@@ -96,7 +104,6 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     consent = ConsentDocumentSchema.parse({ version: env.CONSENT_VERSION, text });
   }
   const vault = new IdentityVault(Buffer.from(env.APP_ENCRYPTION_KEY, 'base64'));
-  const tokens = new AccessTokens(Buffer.from(env.JWT_ACCESS_SECRET, 'base64'), options.clock);
   const auth = await AuthService.create({ db, vault, tokens, consent, clock: options.clock });
   const alerts = new AlertService(db, vault, new AlertHub(), options.clock);
   // Exposed for tests and operations; the same instance serves sockets and the worker.

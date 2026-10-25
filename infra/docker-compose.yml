@@ -109,6 +109,28 @@ services:
         condition: service_healthy
     networks: [frontend]
 
+  # S-10: `docker compose --profile tools run --rm backup backup` (see infra/backup/README.md).
+  backup:
+    build: ./backup
+    image: psychometr-backup:local
+    profiles: [tools]
+    # Runs as the host user, so dumps land in BACKUP_DIR owned by that user (mode 0600).
+    user: ${BACKUP_UID:-1000}:${BACKUP_GID:-1000}
+    environment:
+      PGHOST: db
+      PGUSER: psychometr
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Run pnpm setup:local}
+      PGDATABASE: psychometr
+      AGE_RECIPIENT: ${AGE_RECIPIENT:-}
+      AGE_IDENTITY_FILE: /run/age/key.txt
+    volumes:
+      - ${BACKUP_DIR:-../backups}:/backups
+      - ${AGE_IDENTITY_PATH:-/dev/null}:/run/age/key.txt:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
+
 networks:
   database:
     internal: true
