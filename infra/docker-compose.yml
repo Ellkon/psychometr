@@ -70,6 +70,7 @@ services:
       DATABASE_URL: postgresql://app:${POSTGRES_APP_PASSWORD:?Run pnpm setup:local}@db:5432/psychometr
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Run pnpm setup:local}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Run pnpm setup:local}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-https://localhost:8443}
       CONSENT_VERSION: ${CONSENT_VERSION:-}
       CONSENT_TEXT_PATH: ${CONSENT_TEXT_PATH:-}

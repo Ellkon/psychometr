@@ -6,12 +6,14 @@ import {
   AlertParamsSchema,
   AlertSocketClientMessageSchema,
   ApiErrorSchema,
+  EmptyBodySchema,
   SuccessSchema,
   type Principal,
 } from '@psychometr/shared';
 import type { AuthService } from '../domain/auth.js';
 import type { AlertService } from '../domain/alerts.js';
 import { principal, protectRoute } from './access.js';
+import { errorCodeOf } from '../errors.js';
 
 const errors = {
   400: ApiErrorSchema,
@@ -59,6 +61,7 @@ export function registerAlertRoutes(
       preHandler,
       schema: {
         params: AlertParamsSchema,
+        body: EmptyBodySchema,
         response: { 200: SuccessSchema, ...errors },
       },
     },
@@ -153,13 +156,7 @@ export function registerAlertRoutes(
 
       socket.on('message', (raw: RawData) => {
         handle(raw).catch((error: unknown) => {
-          // Only the SQLSTATE or error name: driver messages can embed query parameters.
-          const code =
-            (error as { code?: unknown }).code ?? (error instanceof Error ? error.name : undefined);
-          app.log.error(
-            { errorCode: typeof code === 'string' ? code : 'unknown' },
-            'alert socket message failed',
-          );
+          app.log.error({ errorCode: errorCodeOf(error) }, 'alert socket message failed');
           socket.close(1011, 'internal');
         });
       });

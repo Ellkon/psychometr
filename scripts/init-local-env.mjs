@@ -32,6 +32,7 @@ const values = {
   MIGRATION_DATABASE_URL: `postgresql://migrator:${migratorPassword}@db:5432/psychometr`,
   APP_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
   JWT_ACCESS_SECRET: randomBytes(32).toString('base64'),
+  METRICS_TOKEN: randomBytes(32).toString('base64url'),
   CONSENT_VERSION: test ? 'ci-synthetic-v1' : '',
   CONSENT_TEXT_PATH: test ? '/run/consent/approved.txt' : '',
   ADMIN_EMAIL: 'admin@example.test',

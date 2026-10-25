@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildApp } from './app.js';
+import { errorCodeOf } from './errors.js';
 import { loadEnv } from './env.js';
 import { testEnv } from './testing/env.js';
 
@@ -64,5 +65,15 @@ describe('loadEnv', () => {
     expect(env.PORT).toBe(3000);
     expect(env.NODE_ENV).toBe('test');
     expect(() => loadEnv({})).toThrow(/Invalid environment/);
+  });
+});
+
+describe('errorCodeOf', () => {
+  it('never throws, whatever was thrown', () => {
+    expect(errorCodeOf(null)).toBe('unknown');
+    expect(errorCodeOf(undefined)).toBe('unknown');
+    expect(errorCodeOf('text')).toBe('unknown');
+    expect(errorCodeOf(Object.assign(new Error('secret param'), { code: '57P01' }))).toBe('57P01');
+    expect(errorCodeOf(new TypeError('secret param'))).toBe('TypeError');
   });
 });

@@ -24,8 +24,10 @@ const CHECK_EVERY_MS = 30_000;
 
 const RULES: { kind: SecuritySignalKind; actions: string[]; threshold: number }[] = [
   {
+    // Object-level denials only: auth.denied also counts routine expired tokens, which would
+    // keep the signal on for any busy clinic.
     kind: 'access_denied_spike',
-    actions: ['access.denied', 'auth.denied'],
+    actions: ['access.denied'],
     threshold: ACCESS_DENIED_THRESHOLD,
   },
   {

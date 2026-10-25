@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
@@ -8,7 +9,7 @@ import { ConsentDocumentSchema, type ConsentDocument } from '@psychometr/shared'
 import { sql } from 'drizzle-orm';
 
 import { loadEnv, type Env } from './env.js';
-import { registerErrorHandler } from './errors.js';
+import { errorCodeOf, registerErrorHandler } from './errors.js';
 import { buildLoggerOptions } from './logger.js';
 import { registerSecurity } from './plugins/security.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -88,14 +89,29 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       return null;
     }
   });
-  // Prometheus (NFR-3). /metrics sits outside /api, so Caddy never exposes it: only the internal
-  // network can scrape it. Route labels are route patterns, never URLs with patient ids.
+  // Prometheus (NFR-3). /metrics sits outside /api, so Caddy never exposes it, and it needs a
+  // bearer token: other containers on the Docker network cannot read it either. Route labels
+  // are route patterns, never URLs with patient ids.
   // CommonJS package: under NodeNext the plugin is the `default` export of the namespace.
   await app.register(fastifyMetrics.default, {
-    endpoint: '/metrics',
+    endpoint: null,
     clearRegisterOnInit: true,
     routeMetrics: { enabled: true, registeredRoutesOnly: true, groupStatusCodes: false },
   });
+  const metricsToken = env.METRICS_TOKEN;
+  if (metricsToken) {
+    const expected = createHash('sha256').update(`Bearer ${metricsToken}`).digest();
+    app.get('/metrics', { config: { disableMetrics: true } }, async (request, reply) => {
+      const given = createHash('sha256')
+        .update(request.headers.authorization ?? '')
+        .digest();
+      if (!timingSafeEqual(given, expected))
+        return reply.code(401).send({ error: { code: 'unauthorized', message: 'Нет доступа' } });
+      return reply
+        .type(app.metrics.client.register.contentType)
+        .send(await app.metrics.client.register.metrics());
+    });
+  }
   registerErrorHandler(app);
   let consent = options.consent;
   if (!consent && env.CONSENT_TEXT_PATH && env.CONSENT_VERSION) {
@@ -148,14 +164,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerSecurityRoutes(app, auth, signals);
   if (options.workers ?? true) {
     let running = false;
-    // Only the SQLSTATE or error name: driver messages can embed query parameters.
     const logFailure = (job: string) => (error: unknown) => {
-      const code =
-        (error as { code?: unknown }).code ?? (error instanceof Error ? error.name : undefined);
-      app.log.error(
-        { job, errorCode: typeof code === 'string' ? code : 'unknown' },
-        'worker failed',
-      );
+      app.log.error({ job, errorCode: errorCodeOf(error) }, 'worker failed');
     };
     const timer = setInterval(() => {
       if (running) return;

@@ -35,6 +35,11 @@ const EnvSchema = z
       z.string().min(1).optional(),
     ),
     TRUST_PROXY: z.enum(['none', 'one-hop']).default('none'),
+    // Bearer token for the Prometheus scrape. Unset: /metrics is not served at all.
+    METRICS_TOKEN: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().min(32).optional(),
+    ),
   })
   .refine((value) => value.APP_ENCRYPTION_KEY !== value.JWT_ACCESS_SECRET, {
     message: 'Use independent encryption and signing keys',

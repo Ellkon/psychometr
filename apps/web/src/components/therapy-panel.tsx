@@ -270,6 +270,8 @@ type DoseStatus = 'taken' | 'skipped';
  * one mark per slot, so a resend never stores a duplicate.
  */
 function useDoseOutbox(patientId: string) {
+  const { user } = useSession();
+  const ownerId = user?.id ?? '';
   const queryClient = useQueryClient();
   const [queued, setQueued] = useState<DoseOutboxItem[]>([]);
   const [refused, setRefused] = useState(0);
@@ -278,12 +280,12 @@ function useDoseOutbox(patientId: string) {
   const flushing = useRef<Promise<void> | null>(null);
 
   const reload = useCallback(async () => {
-    setQueued(await indexedOutbox.list());
-  }, []);
+    setQueued((await indexedOutbox.list()).filter((item) => item.ownerId === ownerId));
+  }, [ownerId]);
   const flush = useCallback((): Promise<void> => {
     flushing.current ??= (async () => {
       try {
-        const report = await flushOutbox(indexedOutbox, async (item) => {
+        const report = await flushOutbox(indexedOutbox, ownerId, async (item) => {
           try {
             await sessionClient.request(
               `/api/patients/${item.patientId}/medications/${item.medicationId}/doses`,
@@ -304,7 +306,7 @@ function useDoseOutbox(patientId: string) {
       }
     })();
     return flushing.current;
-  }, [queryClient, reload]);
+  }, [ownerId, queryClient, reload]);
 
   useEffect(() => {
     flush().catch(() => {
@@ -322,7 +324,13 @@ function useDoseOutbox(patientId: string) {
   const mark = async (medicationId: string, scheduledFor: string, status: DoseStatus) => {
     setError(null);
     try {
-      await enqueueDoseMark(indexedOutbox, { patientId, medicationId, scheduledFor, status });
+      await enqueueDoseMark(indexedOutbox, {
+        ownerId,
+        patientId,
+        medicationId,
+        scheduledFor,
+        status,
+      });
     } catch {
       setError('Не удалось сохранить отметку на этом устройстве');
       return;

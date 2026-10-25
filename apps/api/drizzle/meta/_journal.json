@@ -78,6 +78,13 @@
       "when": 1792915771466,
       "tag": "0010_security_signals_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792918495544,
+      "tag": "0011_session_revocation_guard",
+      "breakpoints": true
     }
   ]
 }

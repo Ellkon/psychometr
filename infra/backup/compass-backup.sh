@@ -9,6 +9,8 @@
 # The plain dump never touches the disk: it is streamed through age. Output is one JSON line,
 # with no data, so it can go to a log.
 set -eu
+# A failing pg_dump must fail the pipeline, not leave a truncated file marked complete.
+set -o pipefail
 
 mode="${1:-}"
 backups=/backups
@@ -30,8 +32,10 @@ case "$mode" in
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
     out="$backups/compass-$stamp.dump.age"
     start="$(now_ms)"
+    trap 'rm -f "$out.partial"' EXIT INT TERM HUP
     pg_dump --format=custom --no-password "$PGDATABASE" | age -r "$AGE_RECIPIENT" -o "$out.partial"
     mv "$out.partial" "$out"
+    trap - EXIT INT TERM HUP
     sha="$(sha256sum "$out" | cut -d' ' -f1)"
     printf '{"event":"backup.completed","file":"%s","bytes":%s,"sha256":"%s","durationMs":%s}\n' \
       "$(basename "$out")" "$(wc -c < "$out")" "$sha" "$(( $(now_ms) - start ))"
@@ -40,9 +44,11 @@ case "$mode" in
   restore-verify)
     file="${2:?usage: restore-verify <file.dump.age>}"
     : "${AGE_IDENTITY_FILE:?AGE_IDENTITY_FILE must point to the age private key}"
-    target="compass_verify_$(date +%s)"
+    # Random name: parallel runs never drop each other's database.
+    target="compass_verify_$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
     start="$(now_ms)"
-    trap 'psql -X -q -d postgres -c "drop database if exists \"$target\" with (force)" >/dev/null 2>&1 || true' EXIT
+    # The throwaway database holds a full copy of the data: drop it on any exit or signal.
+    trap 'psql -X -q -d postgres -c "drop database if exists \"$target\" with (force)" >/dev/null 2>&1 || true' EXIT INT TERM HUP
     psql -X -q -v ON_ERROR_STOP=1 -d postgres -c "create database \"$target\""
     age -d -i "$AGE_IDENTITY_FILE" "$backups/$(basename "$file")" \
       | pg_restore --exit-on-error --no-password -d "$target"

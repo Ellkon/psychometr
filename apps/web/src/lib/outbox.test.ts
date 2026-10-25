@@ -26,6 +26,7 @@ function memoryStore(): OutboxStore & { items: DoseOutboxItem[] } {
 }
 
 const mark = (slot: number) => ({
+  ownerId: 'u',
   patientId: 'p',
   medicationId: 'm',
   scheduledFor: `2026-10-25T0${String(slot)}:00:00.000Z`,
@@ -47,7 +48,7 @@ describe('dose outbox (FR-9)', () => {
     await enqueueDoseMark(store, mark(1), new Date('2026-10-25T06:00:00Z'));
     await enqueueDoseMark(store, mark(2), new Date('2026-10-25T07:00:00Z'));
     const order: number[] = [];
-    const report = await flushOutbox(store, (item) => {
+    const report = await flushOutbox(store, 'u', (item) => {
       order.push(slotOf(item));
       return Promise.resolve('sent' as const);
     });
@@ -60,7 +61,7 @@ describe('dose outbox (FR-9)', () => {
     const store = memoryStore();
     await enqueueDoseMark(store, mark(1), new Date('2026-10-25T06:00:00Z'));
     await enqueueDoseMark(store, mark(2), new Date('2026-10-25T07:00:00Z'));
-    const report = await flushOutbox(store, () => Promise.resolve('retry' as const));
+    const report = await flushOutbox(store, 'u', () => Promise.resolve('retry' as const));
     expect(report).toEqual({ sent: 0, rejected: [], remaining: 2 });
     expect(store.items).toHaveLength(2);
   });
@@ -70,7 +71,7 @@ describe('dose outbox (FR-9)', () => {
     await enqueueDoseMark(store, mark(1), new Date('2026-10-25T06:00:00Z'));
     await enqueueDoseMark(store, mark(2), new Date('2026-10-25T07:00:00Z'));
     const results: Record<number, 'rejected' | 'sent'> = { 1: 'rejected', 2: 'sent' };
-    const report = await flushOutbox(store, (item) =>
+    const report = await flushOutbox(store, 'u', (item) =>
       Promise.resolve(results[slotOf(item)] ?? ('retry' as const)),
     );
     expect(report.sent).toBe(1);
@@ -85,5 +86,21 @@ describe('dose outbox (FR-9)', () => {
     expect(classifySendError(new ApiFailure(429, 'rate_limited', 'x'))).toBe('retry');
     expect(classifySendError(new ApiFailure(503, 'unavailable', 'x'))).toBe('retry');
     expect(classifySendError(new TypeError('Failed to fetch'))).toBe('retry');
+  });
+});
+
+describe('outbox owner', () => {
+  it("drops marks of another user instead of sending them with this user's token", async () => {
+    const store = memoryStore();
+    await enqueueDoseMark(store, { ...mark(1), ownerId: 'someone-else' });
+    await enqueueDoseMark(store, mark(2));
+    const sent: number[] = [];
+    const report = await flushOutbox(store, 'u', (item) => {
+      sent.push(slotOf(item));
+      return Promise.resolve('sent' as const);
+    });
+    expect(sent).toEqual([2]);
+    expect(report.sent).toBe(1);
+    expect(store.items).toHaveLength(0);
   });
 });

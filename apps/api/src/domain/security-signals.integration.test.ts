@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { and, count, eq } from 'drizzle-orm';
 import { SecuritySignalListSchema } from '@psychometr/shared';
 import { fixture, type Fixture } from '../testing/fixture.js';
-import { auditEvents, securitySignals } from '../db/schema.js';
+import { auditEvents, securitySignals, sessions } from '../db/schema.js';
 import { appendAudit } from './audit.js';
 import { SecuritySignalService } from './security-signals.js';
 
@@ -128,6 +128,21 @@ describe('security signals', () => {
     ).rejects.toThrow();
     await expect(
       f.db.update(securitySignals).set({ eventCount: 1 }).where(eq(securitySignals.id, target.id)),
+    ).rejects.toThrow();
+  });
+});
+
+describe('session revocation is one-way (review D1)', () => {
+  it('the runtime role cannot clear revoked_at', async () => {
+    const [session] = await f.db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.userId, f.doctor.user.id))
+      .limit(1);
+    if (!session) throw new Error('no session');
+    await f.db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, session.id));
+    await expect(
+      f.db.update(sessions).set({ revokedAt: null }).where(eq(sessions.id, session.id)),
     ).rejects.toThrow();
   });
 });

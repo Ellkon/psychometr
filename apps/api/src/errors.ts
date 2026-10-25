@@ -2,6 +2,16 @@ import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import { DomainError } from './domain/errors.js';
 
+/**
+ * A loggable identifier of an error: the SQLSTATE or driver code, else the error class name.
+ * Never the message, which can embed query parameters. Safe for any thrown value.
+ */
+export function errorCodeOf(error: unknown): string {
+  if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string')
+    return error.code;
+  return error instanceof Error ? error.name : 'unknown';
+}
+
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error: unknown, request, reply) => {
     if (error instanceof DomainError)

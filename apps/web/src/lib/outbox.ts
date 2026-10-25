@@ -13,6 +13,8 @@ export const OUTBOX_DB_NAME = 'compass-outbox';
 export interface DoseOutboxItem {
   /** Local queue key. The server needs none: one mark per slot makes a resend a no-op. */
   id: string;
+  /** User who made the mark. Another user on this device never sends or sees it. */
+  ownerId: string;
   patientId: string;
   medicationId: string;
   scheduledFor: string;
@@ -79,9 +81,14 @@ export async function enqueueDoseMark(
 /** Sends queued items in order. Stops at the first retryable failure, so order is kept. */
 export async function flushOutbox(
   store: OutboxStore,
+  ownerId: string,
   send: (item: DoseOutboxItem) => Promise<SendResult>,
 ): Promise<FlushReport> {
-  const items = await store.list();
+  const all = await store.list();
+  // Marks left by another user (a session that ended without logout) would go out with this
+  // user's token and be refused: drop them instead of sending them.
+  for (const item of all) if (item.ownerId !== ownerId) await store.remove(item.id);
+  const items = all.filter((item) => item.ownerId === ownerId);
   const report: FlushReport = { sent: 0, rejected: [], remaining: items.length };
   for (const item of items) {
     const result = await send(item);

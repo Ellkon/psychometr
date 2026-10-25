@@ -4,6 +4,7 @@ import { and, count, eq } from 'drizzle-orm';
 import WebSocket, { type RawData } from 'ws';
 import { AlertListSchema, RegistrySchema, TimelineSchema, type Alert } from '@psychometr/shared';
 import { fixture, type Fixture } from '../testing/fixture.js';
+import { TEST_METRICS_TOKEN } from '../testing/env.js';
 import { alerts, auditEvents, careTeam, sessions } from '../db/schema.js';
 import { REFRESH_COOKIE } from '../routes/access.js';
 import { IdentityVault } from '../security/identity.js';
@@ -478,7 +479,23 @@ describe('WebSocket delivery (FR-8.1)', () => {
 });
 
 describe('care-team revocation stops alerts at once (S-2)', () => {
+  it('the only doctor of a patient cannot be removed (audit W1)', async () => {
+    await submitItem9(1);
+    const removed = await f.request(
+      'DELETE',
+      `/api/admin/care-team/${f.patientId}/${f.doctor.user.id}`,
+      f.admin.accessToken,
+    );
+    expect(removed.statusCode).toBe(409);
+    expect(await listAs(f.doctor.accessToken)).toHaveLength(1);
+  });
+
   it('a doctor removed from the care team loses the open alert: list, ack and delivery', async () => {
+    // A second doctor stays on the team: the only doctor cannot be removed.
+    await f.db.insert(careTeam).values({
+      patientId: f.patientId,
+      practitionerId: f.otherDoctor.user.id,
+    });
     await submitItem9(1);
     const [alert] = await listAs(f.doctor.accessToken);
     expect(alert).toBeDefined();
@@ -591,7 +608,21 @@ describe('Prometheus metrics (NFR-3)', () => {
     await f.request('POST', `/api/alerts/${idOf(alert)}/ack`, f.doctor.accessToken, {});
     await f.request('GET', `/api/patients/${f.patientId}/timeline`, f.doctor.accessToken);
 
-    const response = await f.app.inject({ method: 'GET', url: '/metrics' });
+    expect((await f.app.inject({ method: 'GET', url: '/metrics' })).statusCode).toBe(401);
+    expect(
+      (
+        await f.app.inject({
+          method: 'GET',
+          url: '/metrics',
+          headers: { authorization: 'Bearer wrong-token-of-sufficient-length-000000' },
+        })
+      ).statusCode,
+    ).toBe(401);
+    const response = await f.app.inject({
+      method: 'GET',
+      url: '/metrics',
+      headers: { authorization: `Bearer ${TEST_METRICS_TOKEN}` },
+    });
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('compass_alert_acknowledgement_seconds_count 1');
     expect(response.body).toContain('compass_alert_delivery_seconds');

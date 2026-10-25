@@ -300,6 +300,18 @@ export class PatientService {
         if (!patient || !doctor)
           throw new DomainError(404, 'not_found', 'Пациент или врач не найден');
         if (remove) {
+          // A patient always keeps a doctor: critical alerts need a recipient, and an item-9
+          // answer must never fail for lack of one. Assign the new doctor first, then remove.
+          const team = await tx
+            .select({ id: careTeam.practitionerId })
+            .from(careTeam)
+            .where(eq(careTeam.patientId, patientId));
+          if (team.length <= 1 && team.some((member) => member.id === practitionerId))
+            throw new DomainError(
+              409,
+              'last_doctor',
+              'Нельзя снять единственного врача: сначала назначьте другого',
+            );
           await tx
             .delete(careTeam)
             .where(
