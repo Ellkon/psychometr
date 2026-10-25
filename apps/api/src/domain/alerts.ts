@@ -77,6 +77,11 @@ export class AlertHub {
     return [...(this.sockets.get(practitionerId)?.keys() ?? [])];
   }
 
+  /** Doctors with at least one open socket. */
+  connectedIds(): string[] {
+    return [...this.sockets.keys()];
+  }
+
   entries(): SocketEntry[] {
     const all: SocketEntry[] = [];
     for (const [practitionerId, set] of this.sockets) {
@@ -240,18 +245,24 @@ export class AlertService {
       )
       .orderBy(asc(alerts.createdAt))
       .limit(BATCH);
-    for (const row of rows) await this.deliver(row, [socket], now);
-    return rows.length;
+    let delivered = 0;
+    for (const row of rows) if (await this.deliverSafely(row, [socket], now)) delivered++;
+    return delivered;
   }
 
   /** One outbox pass: pending alerts, and sent ones whose last attempt is stale. */
   async dispatch(now = this.now()): Promise<number> {
     const staleBefore = new Date(now.getTime() - RESEND_AFTER_MS);
+    // Only doctors who can receive now: a backlog for offline doctors must not fill the batch
+    // and starve live delivery to connected ones. Offline doctors get theirs on connect.
+    const online = this.hub.connectedIds();
+    if (online.length === 0) return 0;
     const rows = await this.db
       .select()
       .from(alerts)
       .where(
         and(
+          inArray(alerts.recipientId, online),
           isNull(alerts.acknowledgedAt),
           stillAssigned,
           or(
@@ -269,8 +280,7 @@ export class AlertService {
     for (const row of rows) {
       const sockets = this.hub.connected(row.recipientId);
       if (sockets.length === 0) continue;
-      await this.deliver(row, sockets, now);
-      attempted++;
+      if (await this.deliverSafely(row, sockets, now)) attempted++;
     }
     return attempted;
   }
@@ -384,8 +394,34 @@ export class AlertService {
     return closed;
   }
 
-  private async deliver(row: AlertRow, sockets: SocketLike[], now: Date): Promise<void> {
-    const [view] = await this.views(this.db, [row]);
+  /** One failed row must not stop the pass: the next tick retries it. */
+  private async deliverSafely(row: AlertRow, sockets: SocketLike[], now: Date): Promise<boolean> {
+    try {
+      return await this.deliver(row, sockets, now);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Records the attempt first, conditionally, then sends. The condition skips a row that was
+   * acknowledged (or moved on) after it was read, instead of tripping the transition guard; and
+   * writing before sending means a fast `received` can never arrive before `sent`.
+   */
+  private async deliver(row: AlertRow, sockets: SocketLike[], now: Date): Promise<boolean> {
+    const claimed = await this.db
+      .update(alerts)
+      .set({
+        attemptedAt: now,
+        ...(row.status === 'pending' ? { status: 'sent' as const, sentAt: now } : {}),
+      })
+      .where(
+        and(eq(alerts.id, row.id), eq(alerts.status, row.status), isNull(alerts.acknowledgedAt)),
+      )
+      .returning();
+    const [current] = claimed;
+    if (!current) return false;
+    const [view] = await this.views(this.db, [current]);
     const message = JSON.stringify({ type: 'alert', alert: view });
     for (const socket of sockets) {
       try {
@@ -394,13 +430,7 @@ export class AlertService {
         // A dead socket is removed by its own close handler; the row stays open for the next socket.
       }
     }
-    await this.db
-      .update(alerts)
-      .set({
-        attemptedAt: now,
-        ...(row.status === 'pending' ? { status: 'sent' as const, sentAt: now } : {}),
-      })
-      .where(eq(alerts.id, row.id));
+    return true;
   }
 
   /** One identity query per batch, not per alert. */

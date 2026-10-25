@@ -599,3 +599,89 @@ describe('Prometheus metrics (NFR-3)', () => {
     expect(response.body).not.toContain(f.patientId);
   });
 });
+
+describe('only the answered scale re-runs its rules (audit F1)', () => {
+  it('a GAD-7 answer after a positive PHQ-9 item 9 raises no further alert', async () => {
+    const gad7 = await f.request(
+      'PUT',
+      `/api/patients/${f.patientId}/scales/gad7/schedule`,
+      f.doctor.accessToken,
+      { intervalDays: 14, windowDays: 7, active: true },
+    );
+    expect(gad7.statusCode).toBe(200);
+    expect((await submitItem9(1)).statusCode).toBe(201);
+    const loaded = (await loadScaleCatalog()).scales.get('gad7');
+    if (!loaded) throw new Error('missing gad7');
+    for (let i = 0; i < 2; i++) {
+      const response = await f.request(
+        'POST',
+        `/api/patients/${f.patientId}/scales/gad7/responses`,
+        patient,
+        {
+          submissionId: randomUUID(),
+          answers: Object.fromEntries(loaded.file.items.map((item) => [item.id, 0])),
+          functionalAnswer: null,
+        },
+      );
+      expect(response.statusCode).toBe(201);
+    }
+    expect(await alertRows()).toHaveLength(1);
+  });
+});
+
+describe('dispatcher robustness (audit F2, F3)', () => {
+  it('a backlog for an offline doctor does not starve a connected one', async () => {
+    await submitItem9(1);
+    const [evaluation] = await f.db
+      .select({ id: alerts.evaluationId })
+      .from(alerts)
+      .where(eq(alerts.patientId, f.patientId));
+    if (!evaluation) throw new Error('no evaluation');
+    const old = new Date(Date.now() - 3_600_000);
+    await f.db.insert(alerts).values(
+      Array.from({ length: 120 }, (_, i) => ({
+        patientId: f.otherPatientId,
+        recipientId: f.otherDoctor.user.id,
+        evaluationId: evaluation.id,
+        ruleId: 'phq9_item9_positive',
+        severity: 'critical',
+        message: 'm',
+        suggestedAction: 's',
+        status: 'pending' as const,
+        idempotencyKey: `backlog-${randomUUID()}-${String(i)}`,
+        createdAt: new Date(old.getTime() + i),
+      })),
+    );
+    const hub = new AlertHub();
+    const sent: string[] = [];
+    hub.register(
+      f.doctor.user.id,
+      { send: (data: string) => sent.push(data), close: () => undefined },
+      () => Promise.resolve(true),
+    );
+    expect(await service(hub).dispatch(new Date())).toBe(1);
+    expect(sent).toHaveLength(1);
+  });
+
+  it('a row acknowledged after it was read is skipped, not a failed tick', async () => {
+    await submitItem9(1);
+    const [stale] = await alertRows();
+    if (!stale) throw new Error('no alert');
+    expect(
+      (await f.request('POST', `/api/alerts/${stale.id}/ack`, f.doctor.accessToken, {})).statusCode,
+    ).toBe(200);
+    const sent: string[] = [];
+    const internals = service() as unknown as {
+      deliver(row: typeof stale, sockets: unknown[], now: Date): Promise<boolean>;
+    };
+    await expect(
+      internals.deliver(
+        stale,
+        [{ send: (data: string) => sent.push(data), close: () => undefined }],
+        new Date(),
+      ),
+    ).resolves.toBe(false);
+    expect(sent).toEqual([]);
+    expect((await alertRows())[0]?.status).toBe('acknowledged');
+  });
+});

@@ -19,7 +19,13 @@ import { buildFacts, type RuleEngine, type ScoreSnapshot } from './rules.js';
 
 /** Called inside the answer transaction so a card never exists without its answer. */
 export interface CardEvaluator {
-  evaluate(tx: Transaction, patientId: string, actorId: string, now: Date): Promise<void>;
+  evaluate(
+    tx: Transaction,
+    patientId: string,
+    actorId: string,
+    now: Date,
+    answeredScale?: string,
+  ): Promise<void>;
 }
 
 export class ClinicalCardService implements CardEvaluator {
@@ -30,7 +36,13 @@ export class ClinicalCardService implements CardEvaluator {
     private readonly alerts?: AlertService,
   ) {}
 
-  async evaluate(tx: Transaction, patientId: string, actorId: string, now: Date): Promise<void> {
+  async evaluate(
+    tx: Transaction,
+    patientId: string,
+    actorId: string,
+    now: Date,
+    answeredScale?: string,
+  ): Promise<void> {
     const rows = await tx
       .select()
       .from(observations)
@@ -47,7 +59,7 @@ export class ClinicalCardService implements CardEvaluator {
       });
     }
     const facts = buildFacts(latest);
-    for (const item of await this.engine.evaluate(facts)) {
+    for (const item of await this.engine.evaluate(facts, answeredScale)) {
       const { rule } = item;
       const [evaluation] = await tx
         .insert(ruleEvaluations)

@@ -48,8 +48,28 @@ export function buildFacts(latest: ReadonlyMap<string, ScoreSnapshot>): Facts {
   };
 }
 
+/** Facts that come from a scale answer, by scale (see buildFacts). */
+const SCALE_FACTS: Readonly<Record<string, readonly string[]>> = {
+  phq9: ['phq9_total', 'phq9_band', 'phq9_item9_positive'],
+  gad7: ['gad7_total', 'gad7_band'],
+};
+
+/** Scale ids whose facts the rule's decision graph reads ("phq9" for phq9_item9_positive). */
+function scalesRead(rule: Rule): ReadonlySet<string> {
+  const graph = JSON.stringify(rule.decision);
+  const scales = new Set<string>();
+  for (const [scale, facts] of Object.entries(SCALE_FACTS))
+    // A field name or an expression term; fact names are code constants of [a-z0-9_].
+    // eslint-disable-next-line security/detect-non-literal-regexp -- see above
+    if (facts.some((fact) => new RegExp(`(^|[^a-z0-9_])${fact}($|[^a-z0-9_])`).test(graph)))
+      scales.add(scale);
+  return scales;
+}
+
 export interface CompiledRule {
   readonly rule: Rule;
+  /** Scales whose facts the rule reads; empty for rules on other facts. */
+  readonly scales: ReadonlySet<string>;
   /** File name without extension: "routing", "safety", "adherence". */
   readonly category: string;
   /** Present only for active rules; drafts are validated but never evaluated. */
@@ -74,11 +94,16 @@ export class RuleEngine {
     return this.activeCount('routing') > 0 ? 'active' : 'pending_clinical_agreement';
   }
 
-  /** Returns the active rules whose decision table sets `triggered` to true. */
-  async evaluate(facts: Facts): Promise<CompiledRule[]> {
+  /**
+   * Returns the active rules whose decision table sets `triggered` to true. With `answeredScale`,
+   * a rule that reads other scales only is skipped: a GAD-7 answer must not re-fire the PHQ-9
+   * item-9 rule (and its critical alert) on an old PHQ-9 score.
+   */
+  async evaluate(facts: Facts, answeredScale?: string): Promise<CompiledRule[]> {
     const triggered: CompiledRule[] = [];
     for (const item of this.compiled) {
       if (!item.decision) continue;
+      if (answeredScale && item.scales.size > 0 && !item.scales.has(answeredScale)) continue;
       const response = await item.decision.evaluate(facts);
       const result = response.result as Record<string, unknown>;
       if (typeof result['triggered'] !== 'boolean') {
@@ -111,7 +136,7 @@ export function compileRuleEngine(
         throw new Error(`Правило ${rule.id} ссылается на неизвестный источник ${rule.source_id}`);
       }
       const decision = rule.status === 'active' ? zen.createDecision(rule.decision) : null;
-      compiled.push({ rule, category, decision });
+      compiled.push({ rule, category, decision, scales: scalesRead(rule) });
     }
   }
   return new RuleEngine(compiled);

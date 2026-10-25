@@ -333,7 +333,7 @@ export class ScaleService {
           effectiveAt: answeredAt,
         });
         // Clinical rules see the score in the same transaction as the answer (FR-4.5).
-        await this.cards?.evaluate(tx, patientId, user.id, answeredAt);
+        await this.cards?.evaluate(tx, patientId, user.id, answeredAt, scaleId);
         await appendAudit(
           tx,
           {
