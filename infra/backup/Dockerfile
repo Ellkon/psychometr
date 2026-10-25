@@ -3,4 +3,6 @@ FROM postgres:16-alpine
 RUN apk add --no-cache age
 COPY compass-backup.sh /usr/local/bin/compass-backup
 RUN chmod 0755 /usr/local/bin/compass-backup
+# Never root; compose overrides with the host user so dumps are owned by them.
+USER postgres
 ENTRYPOINT ["/usr/local/bin/compass-backup"]
