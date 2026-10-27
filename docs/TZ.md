@@ -131,7 +131,7 @@
 ### NFR-2. Аудиты безопасности
 - **Каждый PR (CI):** Semgrep (`p/typescript`, `p/owasp-top-ten`, `p/jwt`), eslint-plugin-security, gitleaks, `pnpm audit --audit-level=high`, Trivy (fail на HIGH/CRITICAL), OWASP ZAP baseline против стека в docker compose, IDOR-матрица «роль × эндпоинт × чужой пациент».
 - **Перед merge фичи:** security review диффа (инструментом агента или вручную по `AGENTS.md`).
-- **Ручные аудиты:** 27.10 и 29.10. Чеклист OWASP ASVS L2 (V2, V3, V4, V7, V8, V9) и OWASP Top 10, ZAP full scan, ручная попытка обхода приглашения и IDOR. Отчёт сохраняется в `docs/security/audit-YYYY-MM-DD.md`.
+- **Ручные аудиты:** 27.10 и 29.10. Чеклист OWASP ASVS L2 (V2, V3, V4, V7, V8, V9) и OWASP Top 10, ZAP full scan, ручная попытка обхода приглашения и IDOR. Отчёт хранится вне репозитория (`internal/`).
 - **Модель угроз:** `SECURITY.md` (облегчённая STRIDE).
 - **Рантайм:** алерт администратору при аномалиях: 20 и более отказов в доступе или 10 и более неверных паролей и кодов за 5 минут. Сигнал содержит только счётчик.
 
