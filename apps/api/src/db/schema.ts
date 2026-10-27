@@ -496,6 +496,38 @@ export const contacts = pgTable(
 );
 
 /**
+ * Диагноз, записанный врачом (FR-7.4): код МКБ-10 (может отсутствовать) и формулировка врача.
+ * Не редактируется: врач снимает диагноз (removed_at) и записывает новый.
+ */
+export const diagnoses = pgTable(
+  'diagnoses',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    patientId: uuid('patient_id')
+      .notNull()
+      .references(() => patients.id, { onDelete: 'restrict' }),
+    practitionerId: uuid('practitioner_id')
+      .notNull()
+      .references(() => practitioners.userId, { onDelete: 'restrict' }),
+    submissionId: uuid('submission_id').notNull(),
+    code: text('code'),
+    text: text('text').notNull(),
+    createdAt: time('created_at').notNull(),
+    removedAt: time('removed_at'),
+    removedBy: uuid('removed_by').references(() => practitioners.userId, {
+      onDelete: 'restrict',
+    }),
+  },
+  (table) => [
+    uniqueIndex('diagnoses_submission_idx').on(table.practitionerId, table.submissionId),
+    index('diagnoses_patient_idx').on(table.patientId, table.createdAt),
+    check('diagnoses_code_format', sql`${table.code} ~ '^[A-Z][0-9]{2}(\\.[0-9]{1,2})?$'`),
+    check('diagnoses_text_length', sql`length(${table.text}) between 1 and 300`),
+    check('diagnoses_removal', sql`(${table.removedAt} is null) = (${table.removedBy} is null)`),
+  ],
+);
+
+/**
  * Алерт врачу (FR-8). Строка одновременно является transactional outbox: её создают в той же
  * транзакции, что и источник. Источник `rule` — срабатывание critical-правила, текст из правила
  * (content/rules). Источник `adverse_event` — уведомление о НЯ со слов пациента (warning, без

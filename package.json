@@ -17,6 +17,7 @@
     "test:e2e": "pnpm --filter @psychometr/shared build && playwright test",
     "check:content": "node scripts/check-content.mjs",
     "import:grls": "node scripts/import-grls.mjs",
+    "import:icd10": "node scripts/import-icd10.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "pnpm --filter @psychometr/api db:generate",
