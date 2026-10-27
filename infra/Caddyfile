@@ -1,6 +1,8 @@
 # HTTPS-only entry point. No request objects (URI, cookies, headers) in logs.
 {
 	admin off
+	# Browsers send no SNI for an IP address; without this the handshake fails on an IP-only host.
+	default_sni {$APP_HOST:localhost}
 	log default {
 		format filter {
 			wrap json
