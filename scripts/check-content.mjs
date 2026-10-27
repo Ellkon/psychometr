@@ -15,6 +15,7 @@ import {
   DrugCatalogFileSchema,
   DrugFeaturedFileSchema,
   EmergencyFileSchema,
+  Icd10FileSchema,
   RuleFileSchema,
   ScaleFileSchema,
   SourcesFileSchema,
@@ -33,6 +34,7 @@ const VALIDATORS = {
   'emergency/patient.ru.json': EmergencyFileSchema,
   'drugs/grls-psychotropics.json': DrugCatalogFileSchema,
   'drugs/featured.json': DrugFeaturedFileSchema,
+  'icd10/mkb10.json': Icd10FileSchema,
 };
 
 let failed = false;
@@ -153,6 +155,25 @@ try {
 } catch (error) {
   failed = true;
   console.error('FAIL: emergency references: %s', error instanceof Error ? error.message : error);
+}
+
+// The ICD-10 catalog cites a registered source.
+try {
+  const sources = new Set(
+    JSON.parse(await readFile(path.join(contentDir, 'sources.json'), 'utf8')).sources.map(
+      (source) => source.id,
+    ),
+  );
+  const file = Icd10FileSchema.parse(
+    JSON.parse(await readFile(path.join(contentDir, 'icd10/mkb10.json'), 'utf8')),
+  );
+  if (!sources.has(file.source_id)) {
+    failed = true;
+    console.error('FAIL: content/icd10/mkb10.json cites unknown source "%s"', file.source_id);
+  }
+} catch (error) {
+  failed = true;
+  console.error('FAIL: ICD-10 catalog: %s', error instanceof Error ? error.message : error);
 }
 
 for (const entry of entries) {

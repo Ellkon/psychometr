@@ -29,6 +29,8 @@ export * from './therapy.js';
 
 export * from './contacts.js';
 
+export * from './diagnoses.js';
+
 export * from './alerts.js';
 
 export * from './security.js';

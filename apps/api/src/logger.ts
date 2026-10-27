@@ -39,6 +39,8 @@ const sensitiveFields = [
   'doseText',
   'description',
   'diagnosis',
+  'diagnoses',
+  'text',
   'ciphertext',
   'body',
   'payload',

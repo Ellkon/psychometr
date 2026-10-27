@@ -15,6 +15,7 @@ import { AsyncForm, Button, ErrorNotice, Field } from '../components/forms.js';
 import { IdentityForm } from '../components/identity-form.js';
 import { ScalesPanel } from '../components/scales-panel.js';
 import { ContactsPanel } from '../components/contacts-panel.js';
+import { DiagnosesPanel } from '../components/diagnoses-panel.js';
 import { ClinicalCardsPanel } from '../components/clinical-cards-panel.js';
 import { TherapyPanel } from '../components/therapy-panel.js';
 import { TimelinePanel } from '../components/timeline-panel.js';
@@ -105,6 +106,7 @@ export function PatientPage() {
           )}
         </CardContent>
       </Card>
+      {user.role === 'doctor' && <DiagnosesPanel patientId={id} />}
       {(user.role === 'doctor' || user.role === 'patient') && <TherapyPanel patientId={id} />}
       {(user.role === 'doctor' || user.role === 'patient') && <ScalesPanel patientId={id} />}
       {(user.role === 'doctor' || user.role === 'patient') && <ContactsPanel patientId={id} />}
