@@ -13,13 +13,13 @@ apps/api/          Fastify + TypeScript, REST + WebSocket
 apps/web/          React 19 + Vite PWA
 packages/shared/   zod-схемы и типы (общие для api и web)
 content/           шкалы, препараты, правила, источники (JSON)
-docs/              ТЗ, security-отчёты
+docs/              ТЗ
 infra/             docker compose, Caddy, скрипты бэкапа
 ```
 
 ## Команды
 
-pnpm глобально не ставится: используй `npx pnpm@12.15.0 <команда>` (или `corepack enable`). Хранилище пакетов лежит в `.pnpm-store/` внутри репозитория. Подробности запуска — в `README.md` и `docs/development/stage-2.md`.
+pnpm глобально не ставится: используй `npx pnpm@12.15.0 <команда>` (или `corepack enable`). Хранилище пакетов лежит в `.pnpm-store/` внутри репозитория. Подробности запуска — в `README.md`.
 
 ```bash
 pnpm install

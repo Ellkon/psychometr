@@ -12,12 +12,6 @@ PWA-ассистент врача для сопровождения терапи
 - [`docs/TZ.md`](docs/TZ.md) — требования и план.
 - [`AGENTS.md`](AGENTS.md) — правила разработки.
 - [`SECURITY.md`](SECURITY.md) — модель угроз.
-- [`docs/development/stage-2.md`](docs/development/stage-2.md) — устройство этапа 2,
-  зависимости, команды и ограничения.
-- [`docs/security/stage-2-review.md`](docs/security/stage-2-review.md) — результаты
-  проверки, включая то, что пока не проверено.
-- [`docs/development/stage-3.md`](docs/development/stage-3.md) — шкалы PHQ-9 и GAD-7,
-  правила расписания, открытые вопросы этапа 3.
 
 ## Быстрый старт: изолированный локальный стенд
 
@@ -92,8 +86,7 @@ pnpm test:e2e         # запущенный HTTPS-стенд + браузер P
 ```
 
 Бэкап и восстановление — [`infra/backup/README.md`](infra/backup/README.md), нагрузочный тест k6 —
-[`infra/load/k6-clinical-compass.js`](infra/load/k6-clinical-compass.js), замеры —
-[`docs/development/stage-8.md`](docs/development/stage-8.md).
+[`infra/load/k6-clinical-compass.js`](infra/load/k6-clinical-compass.js).
 
 В `.env`, созданном для Compose, адрес БД — `db` (внутри контейнеров).
 Для `pnpm dev` с БД вне Docker задайте свой `DATABASE_URL`/`MIGRATION_DATABASE_URL`.
