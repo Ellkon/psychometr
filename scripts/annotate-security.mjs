@@ -32,7 +32,9 @@ export function annotationsFor(scanner, report) {
         message: `Semgrep: ${finding.check_id}`,
       }));
       for (const error of report.errors ?? []) {
-        findings.push({ message: `Semgrep scan error: ${error.type}` });
+        // PartialParsing arrives as [name, locations]; keep only the name.
+        const type = Array.isArray(error.type) ? error.type[0] : error.type;
+        findings.push({ message: `Semgrep scan error: ${type}` });
       }
       break;
     case 'trivy':

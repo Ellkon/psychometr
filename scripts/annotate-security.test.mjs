@@ -38,6 +38,15 @@ test('semgrep annotations contain the rule and location, never source or error t
   assert.ok(!annotations.join('').includes('sensitive-fixture'));
 });
 
+test('semgrep partial-parsing errors show only the error name', () => {
+  const [annotation] = annotationsFor('semgrep', {
+    results: [],
+    errors: [{ type: ['PartialParsing', [{ path: 'sensitive-fixture.ts' }]] }],
+  });
+  assert.match(annotation, /Semgrep scan error: PartialParsing$/);
+  assert.ok(!annotation.includes('sensitive-fixture'));
+});
+
 test('trivy reports HIGH and CRITICAL including unfixed vulnerabilities', () => {
   const annotations = annotationsFor('trivy', {
     Results: [

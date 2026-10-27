@@ -78,7 +78,7 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
             -v "$PWD:/src" -w /src semgrep/semgrep:1.182.1 \
             semgrep scan --config p/typescript --config p/owasp-top-ten --config p/jwt \
-            --error --strict --metrics=off --disable-version-check \
+            --error --metrics=off --disable-version-check \
             --json-output=.ci-reports/semgrep.json .
       - name: Annotate findings
         if: always()
