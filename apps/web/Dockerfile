@@ -24,7 +24,7 @@ RUN go mod init psychometr.local/caddy \
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /caddy \
         github.com/caddyserver/caddy/v2/cmd/caddy
 
-FROM caddy:2.11.7-alpine AS runtime
+FROM caddy:2.11.8-alpine AS runtime
 COPY --from=caddy-build /caddy /usr/bin/caddy
 # Patched Alpine packages from the base (Trivy HIGH/CRITICAL gate), e.g. brotli-libs.
 RUN apk upgrade --no-cache \
