@@ -17,7 +17,7 @@ RUN pnpm --filter @psychometr/shared build && pnpm --filter @psychometr/web buil
 
 # The official 2.11.7 binary embeds vulnerable Go 1.26.8 and x/net 0.59.0.
 # Rebuild the same release with patched dependencies instead of ignoring CVEs.
-FROM golang:1.27.3-alpine AS caddy-build
+FROM golang:1.27.4-alpine AS caddy-build
 WORKDIR /src
 RUN go mod init psychometr.local/caddy \
     && go get github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.7 golang.org/x/net@v0.60.0 \
